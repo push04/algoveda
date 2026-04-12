@@ -19,6 +19,7 @@ const NAV_ITEMS = [
 
 const ADMIN_ITEMS = [
   { href: '/admin/plans', icon: 'workspace_premium', label: 'Manage Plans' },
+  { href: '/admin/api-tester', icon: 'api', label: 'Live API Tester' },
 ];
 
 export default function Sidebar() {
