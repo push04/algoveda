@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
+import LiveMarketChart from '@/components/learn/LiveMarketChart';
 
 interface QuizQuestion {
   id: string;
@@ -143,7 +144,7 @@ export default function LearnPage() {
 
   if (loading) {
     return (
-      <main className="pt-6 px-8 pb-12 max-w-6xl mx-auto">
+      <main className="pt-8 px-8 pb-12 max-w-6xl mx-auto">
         <div className="animate-pulse space-y-6 mt-8">
           <div className="h-8 bg-stone-200 rounded w-64" />
           <div className="h-4 bg-stone-100 rounded w-96" />
@@ -158,16 +159,16 @@ export default function LearnPage() {
   // Locked state — not subscribed
   if (!subscribed) {
     return (
-      <main className="pt-6 px-8 pb-12 max-w-6xl mx-auto">
+      <main className="pt-8 px-8 pb-12 max-w-6xl mx-auto">
         {/* Header visible to all */}
-        <div className="mb-8">
+        <div className="mb-8 relative z-10">
           <span className="text-[10px] font-data uppercase tracking-[0.3em] text-[#795900]">Education Center</span>
           <h1 className="font-headline text-4xl text-[#00361a] mt-1">Learn Stock Market</h1>
           <p className="text-stone-500 text-sm mt-1">Master investing from basics to advanced</p>
         </div>
 
         {/* Locked Content Overlay */}
-        <div className="relative">
+        <div className="relative min-h-[680px]">
           {/* Blurred preview of modules */}
           <div className="filter blur-sm pointer-events-none select-none opacity-50">
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -241,12 +242,21 @@ export default function LearnPage() {
   }
 
   return (
-    <main className="pt-6 px-8 pb-12 max-w-6xl mx-auto">
+    <main className="pt-8 px-8 pb-12 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <span className="text-[10px] font-data uppercase tracking-[0.3em] text-[#795900]">Education Center</span>
-        <h1 className="font-headline text-4xl text-[#00361a] mt-1">Learn Stock Market</h1>
-        <p className="text-stone-500 text-sm mt-1">Master investing from basics to advanced. Score 15/20+ to unlock ₹1 Lakh Paper Trading!</p>
+      <div className="flex justify-between items-end mb-8">
+        <div>
+          <span className="text-[10px] font-data uppercase tracking-[0.3em] text-[#795900]">Education Center</span>
+          <h1 className="font-headline text-4xl text-[#00361a] mt-1">Learn Stock Market</h1>
+          <p className="text-stone-500 text-sm mt-1">Master investing from basics to advanced. Score 15/20+ to unlock ₹1 Lakh Paper Trading!</p>
+        </div>
+        <Link 
+          href="/learn/handbook"
+          className="flex items-center gap-2 px-6 py-3 bg-[#00361a] text-white rounded-xl font-ui font-bold hover:bg-[#1A4D2E] shadow-lg shadow-emerald-900/20 transition-all"
+        >
+          <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_stories</span>
+          Read Complete Handbook
+        </Link>
       </div>
 
       {/* Progress Card */}
@@ -268,6 +278,8 @@ export default function LearnPage() {
           <span>{passed ? '🎉 Goal reached!' : `Goal: 15/20`}</span>
         </div>
       </div>
+
+      <LiveMarketChart />
 
       {/* Learning Modules */}
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

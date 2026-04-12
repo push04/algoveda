@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import StockSearch from '@/components/ui/StockSearch';
 
 function getISTTime(): Date {
   return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
@@ -66,17 +67,8 @@ export default function TopNav() {
         </div>
 
         {/* Search Bar */}
-        <div className="relative group">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 text-[18px] group-focus-within:text-[#00361a] transition-colors">
-            search
-          </span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search stocks, strategies..."
-            className="pl-10 pr-4 py-1.5 bg-stone-100/60 border-none rounded-lg text-sm w-56 focus:outline-none focus:ring-1 focus:ring-[#00361a]/20 font-body text-stone-700 placeholder:text-stone-400"
-          />
+        <div className="w-64 z-50">
+          <StockSearch />
         </div>
 
         {/* Quick Nav */}

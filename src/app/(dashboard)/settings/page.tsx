@@ -35,7 +35,6 @@ const TABS = [
   { id: 'email', label: 'Email Digest', icon: 'mail' },
   { id: 'security', label: 'Security', icon: 'shield' },
   { id: 'billing', label: 'Billing & Plans', icon: 'credit_card' },
-  { id: 'diagnostics', label: 'API Diagnostics', icon: 'api' },
 ];
 
 export default function SettingsPage() {

@@ -105,17 +105,17 @@ export default function ResearchPage() {
   const generate = async (sym?: string) => {
     const target = sym ?? (customSymbol.toUpperCase() || symbol);
 
-    // Check plan limit from previous result's planInfo
-    if (result?.planInfo && usageCount >= result.planInfo.suggestionLimit) {
-      setError(`You've reached your ${result.planInfo.suggestionLimit} report limit on the ${userPlan} plan. Upgrade for more.`);
-      return;
-    }
-
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const res = await fetch(`/api/groq/research?symbol=${target}&count=${usageCount + 1}`);
+      const res = await fetch(`/api/groq/research?symbol=${target}`);
+      if (res.status === 429 || res.status === 401) {
+        const d = await res.json();
+        setError(d.error ?? 'Rate limit reached');
+        setLoading(false);
+        return;
+      }
       if (!res.ok) {
         const d = await res.json();
         throw new Error(d.error ?? `HTTP ${res.status}`);
@@ -515,7 +515,7 @@ export default function ResearchPage() {
             {/* Footer */}
             <div className="flex items-center gap-2 text-[10px] text-stone-400 font-data">
               <span className="material-symbols-outlined text-[14px]">schedule</span>
-              Generated {new Date(result!.generatedAt).toLocaleTimeString('en-IN')} · Model: {result!.model}
+              Generated {new Date(result!.generatedAt).toLocaleTimeString('en-IN')} · Powered by AlgoVeda AI
               <span className="ml-auto">For research only — not investment advice</span>
             </div>
           </div>

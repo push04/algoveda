@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
 import { fetchYahooV8 } from '@/app/api/market/quote/route';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
 export const maxDuration = 45;
@@ -24,43 +25,64 @@ async function fetchMarketNews(symbol: string): Promise<string> {
       }
     }
   } catch { /* ignore */ }
-  // Fallback — let AI generate context from its training
   return `No live news available. Use your knowledge of ${symbol} as of your training data to assess recent developments.`;
 }
 
-// Check user plan and get suggestion limit
-async function getUserPlanLimit(supabase: Awaited<ReturnType<typeof createClient>>): Promise<{ limit: number; plan: string }> {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { limit: 2, plan: 'explorer' };
-
-    const { data: profile } = await supabase.from('profiles').select('plan').eq('id', user.id).single();
-    const planSlug = profile?.plan ?? 'explorer';
-
-    const { data: planRow } = await supabase
-      .from('subscription_plans')
-      .select('max_ai_suggestions')
-      .eq('slug', planSlug)
-      .single();
-
-    return { limit: planRow?.max_ai_suggestions ?? 2, plan: planSlug };
-  } catch {
-    return { limit: 2, plan: 'explorer' };
-  }
-}
+// FREE_LIMIT: 2 researches per 3 hours per user
+const FREE_LIMIT = 2;
+const WINDOW_HOURS = 3;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get('symbol') ?? 'RELIANCE';
-  const count = parseInt(searchParams.get('count') ?? '1');
 
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
+
+  // Get authenticated user
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Check plan
+  let plan = 'explorer';
+  let isPaidUser = false;
+  if (user) {
+    const { data: profile } = await adminSupabase.from('profiles').select('plan').eq('id', user.id).single();
+    plan = profile?.plan ?? 'explorer';
+    isPaidUser = !['explorer', 'free', ''].includes(plan.toLowerCase());
+  }
+
+  // Rate limit: free/explorer users get 2 per 3 hours
+  if (!isPaidUser) {
+    if (user) {
+      // Count usage in last 3 hours
+      const windowStart = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000).toISOString();
+      const { count } = await adminSupabase
+        .from('research_usage')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .gte('used_at', windowStart);
+
+      if ((count ?? 0) >= FREE_LIMIT) {
+        const resetTime = new Date(Date.now() + 30 * 60 * 1000); // next check in 30 min approx
+        return NextResponse.json({
+          error: `Free plan allows ${FREE_LIMIT} AI researches every ${WINDOW_HOURS} hours. Upgrade to Pro for unlimited access.`,
+          rateLimited: true,
+          resetAt: resetTime.toISOString(),
+          upgradeUrl: '/pricing',
+        }, { status: 429 });
+      }
+    } else {
+      // Anonymous users: deny
+      return NextResponse.json({
+        error: 'Please sign in to use AI Research.',
+        rateLimited: true,
+        upgradeUrl: '/auth/login',
+      }, { status: 401 });
+    }
+  }
 
   try {
-    // Get plan limits
-    const { limit: suggestionLimit, plan } = await getUserPlanLimit(supabase);
-
-    // Fetch live price directly
+    // Fetch live price
     const priceData = await fetchYahooV8(symbol);
 
     const priceContext = priceData && priceData.price > 0
@@ -128,17 +150,21 @@ Be precise, data-driven, and use Indian market context. sentimentScore is 0-100 
       report = { error: 'Parse failed', raw };
     }
 
+    // Record usage for free users
+    if (user && !isPaidUser) {
+      await adminSupabase.from('research_usage').insert({ user_id: user.id, symbol });
+    }
+
     return NextResponse.json({
       symbol: symbol.toUpperCase(),
       report,
       priceData: priceData ?? null,
       generatedAt: new Date().toISOString(),
-      model: 'llama-3.3-70b-versatile',
       planInfo: {
         plan,
-        suggestionLimit,
-        currentCount: count,
-        canGenerate: count <= suggestionLimit,
+        isPaidUser,
+        freeLimit: FREE_LIMIT,
+        windowHours: WINDOW_HOURS,
       },
     });
   } catch (err: unknown) {

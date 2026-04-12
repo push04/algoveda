@@ -47,35 +47,39 @@ export default function PricingPage() {
   const supabase = createClient();
 
   useEffect(() => {
-    const load = async () => {
-      // Load plans
-      const res = await fetch('/api/admin/plans');
-      const data = await res.json();
-      // Sort: starter first, then by sort_order
-      const sorted = (data.plans ?? []).sort((a: Plan, b: Plan) => {
-        if (a.slug === 'starter') return -1;
-        if (b.slug === 'starter') return 1;
-        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
-      });
+    // Load Razorpay script early
+    if (!document.getElementById('razorpay-script')) {
+      const script = document.createElement('script');
+      script.id = 'razorpay-script';
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      document.body.appendChild(script);
+    }
+
+    // Load plans
+    fetch('/api/admin/plans').then(r => r.json()).then(data => {
+      const sorted = (data.plans ?? [])
+        .filter((p: Plan) => p.slug !== 'institution') // remove institutional plan
+        .sort((a: Plan, b: Plan) => {
+          if (a.slug === 'starter') return -1;
+          if (b.slug === 'starter') return 1;
+          return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+        });
       setPlans(sorted);
       setLoading(false);
+    });
 
-      // Load user
-      const { data: { user: u } } = await supabase.auth.getUser();
-      if (u) {
+    // Use auth state change for reliable session detection
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const u = session.user;
         const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', u.id).single();
         setUser({ id: u.id, email: u.email, name: profile?.full_name });
+      } else {
+        setUser(null);
       }
+    });
 
-      // Load Razorpay script
-      if (!document.getElementById('razorpay-script')) {
-        const script = document.createElement('script');
-        script.id = 'razorpay-script';
-        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-        document.body.appendChild(script);
-      }
-    };
-    load();
+    return () => subscription.unsubscribe();
   }, []);
 
   const showToast = (msg: string, ok = true) => {

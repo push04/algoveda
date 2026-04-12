@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import StockSearch from '@/components/ui/StockSearch';
 
 interface Portfolio {
   id: string;
@@ -425,13 +426,16 @@ export default function PaperTradePage() {
               <div>
                 <label className="block text-xs font-ui font-bold text-stone-500 uppercase tracking-wider mb-2">Stock Symbol (NSE)</label>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={sym}
-                    onChange={(e) => setSym(e.target.value.toUpperCase())}
-                    placeholder="e.g. RELIANCE"
-                    className="flex-1 px-4 py-3 bg-white border border-stone-200 rounded-xl font-data text-sm focus:outline-none focus:ring-2 focus:ring-[#1A4D2E]/20"
-                  />
+                  <div className="flex-1">
+                    <StockSearch 
+                      placeholder="Search NSE/BSE stock..." 
+                      onSelect={(stock) => {
+                        setSym(stock.symbol.toUpperCase());
+                        fetchLivePrice(stock.symbol);
+                      }}
+                      clearOnSelect={false}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => fetchLivePrice(sym)}
