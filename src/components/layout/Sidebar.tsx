@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { href: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
+  { href: '/learn', icon: 'school', label: 'Learn' },
   { href: '/screener', icon: 'filter_alt', label: 'Screener' },
   { href: '/backtest', icon: 'history_toggle_off', label: 'Backtest' },
   { href: '/paper-trade', icon: 'currency_exchange', label: 'Paper Trade' },
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
 const ADMIN_ITEMS = [
   { href: '/admin/overview', icon: 'monitor_heart', label: 'System Overview' },
   { href: '/admin/plans', icon: 'workspace_premium', label: 'Manage Plans' },
+  { href: '/admin/coupons', icon: 'sell', label: 'Manage Coupons' },
   { href: '/admin/api-tester', icon: 'api', label: 'Live API Tester' },
 ];
 

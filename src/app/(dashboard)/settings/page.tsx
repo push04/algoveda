@@ -1,89 +1,165 @@
 'use client';
 
 import { createClient } from '@/lib/supabase/client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 
-interface APIResult {
-  name: string;
-  status: 'pending' | 'success' | 'failed';
-  message?: string;
-  data?: any;
-  latency?: number;
+interface Profile {
+  full_name: string;
+  email: string;
+  phone: string;
+  timezone: string;
+  plan: string;
+  avatar_url?: string;
 }
+
+interface EmailPrefs {
+  digest_enabled: boolean;
+  digest_frequency: string;
+  include_nifty50: boolean;
+  include_watchlist: boolean;
+  include_ai_picks: boolean;
+  include_news: boolean;
+  include_macro: boolean;
+}
+
+interface ApiResult {
+  name: string;
+  status: 'pending' | 'ok' | 'fail';
+  ms?: number;
+  detail?: string;
+}
+
+const TABS = [
+  { id: 'profile', label: 'Profile', icon: 'person' },
+  { id: 'email', label: 'Email Digest', icon: 'mail' },
+  { id: 'security', label: 'Security', icon: 'shield' },
+  { id: 'billing', label: 'Billing & Plans', icon: 'credit_card' },
+  { id: 'diagnostics', label: 'API Diagnostics', icon: 'api' },
+];
 
 export default function SettingsPage() {
   const supabase = createClient();
-  const [activeTab, setActiveTab] = useState('profile');
+  const [tab, setTab] = useState('profile');
+  const [profile, setProfile] = useState<Profile>({ full_name: '', email: '', phone: '', timezone: 'Asia/Kolkata', plan: 'explorer' });
+  const [emailPrefs, setEmailPrefs] = useState<EmailPrefs>({
+    digest_enabled: true, digest_frequency: '6h',
+    include_nifty50: true, include_watchlist: true,
+    include_ai_picks: true, include_news: true, include_macro: false,
+  });
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [apiResults, setApiResults] = useState<ApiResult[]>([]);
   const [testing, setTesting] = useState(false);
-  const [apiResults, setApiResults] = useState<APIResult[]>([]);
 
-  const [profile, setProfile] = useState({
-    fullName: 'Pushpal S.',
-    email: 'admin@algoveda.io',
-    phone: '+91 98765 43210',
-    timezone: 'Asia/Kolkata',
-  });
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
 
-  const [emailPrefs, setEmailPrefs] = useState({
-    digestEnabled: true,
-    digestFrequency: '4h',
-    includeNifty50: true,
-    includeWatchlist: true,
-    includeAiPicks: true,
-    includeNews: true,
-    includeMacro: true,
-  });
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
+    setUserId(user.id);
 
-  const tabs = [
-    { id: 'profile', label: 'Profile', icon: 'person' },
-    { id: 'email', label: 'Email Preferences', icon: 'mail' },
-    { id: 'security', label: 'Security', icon: 'shield' },
-    { id: 'billing', label: 'Billing', icon: 'credit_card' },
-    { id: 'api-test', label: 'API Diagnostics', icon: 'api' },
-  ];
+    // Load profile
+    const { data: p } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    if (p) setProfile({
+      full_name: p.full_name ?? '',
+      email: p.email ?? user.email ?? '',
+      phone: p.phone ?? '',
+      timezone: p.timezone ?? 'Asia/Kolkata',
+      plan: p.plan ?? 'explorer',
+      avatar_url: p.avatar_url,
+    });
+
+    // Load email prefs
+    const { data: ep } = await supabase.from('email_preferences').select('*').eq('user_id', user.id).maybeSingle();
+    if (ep) setEmailPrefs({
+      digest_enabled: ep.digest_enabled ?? true,
+      digest_frequency: ep.digest_frequency ?? '6h',
+      include_nifty50: ep.include_nifty50 ?? true,
+      include_watchlist: ep.include_watchlist ?? true,
+      include_ai_picks: ep.include_ai_picks ?? true,
+      include_news: ep.include_news ?? true,
+      include_macro: ep.include_macro ?? false,
+    });
+
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const saveProfile = async () => {
+    if (!userId) return;
+    setSaving(true);
+    const { error } = await supabase.from('profiles').update({
+      full_name: profile.full_name,
+      phone: profile.phone,
+      timezone: profile.timezone,
+    }).eq('id', userId);
+    showToast(error ? error.message : 'Profile saved!', !error);
+    setSaving(false);
+  };
+
+  const saveEmailPrefs = async () => {
+    if (!userId) return;
+    setSaving(true);
+    const { error } = await supabase.from('email_preferences').upsert({
+      user_id: userId,
+      id: userId,
+      ...emailPrefs,
+    });
+    showToast(error ? error.message : 'Email preferences saved!', !error);
+    setSaving(false);
+  };
 
   const testAllAPIs = async () => {
     setTesting(true);
-    setApiResults([
-      { name: 'Market Quote API', status: 'pending' },
-      { name: 'Market Indices API', status: 'pending' },
-      { name: 'Backtest API', status: 'pending' },
-      { name: 'Supabase DB', status: 'pending' },
-      { name: 'NSE India (External)', status: 'pending' },
-      { name: 'Yahoo Finance (External)', status: 'pending' },
-    ]);
-
-    const apis = [
-      { name: 'Market Quote API', fn: () => fetch('/api/market/quote?symbol=RELIANCE').then(r => r.json()) },
-      { name: 'Market Indices API', fn: () => fetch('/api/market/indices').then(r => r.json()) },
-      { name: 'Backtest API', fn: () => fetch('/api/backtest').then(r => r.json()).catch(e => ({ error: e.message })) },
-      { name: 'Supabase DB', fn: () => supabase.from('subscription_plans').select('*').then(r => ({ data: r.data?.length || 0 })) },
-      { name: 'NSE India (External)', fn: () => fetch('https://www.nseindia.com/api/quoteEquity?symbol=RELIANCE&section=info').then(r => ({ status: r.ok })) },
-      { name: 'Yahoo Finance (External)', fn: () => fetch('https://query1.finance.yahoo.com/v8/finance/chart/RELIANCE.NS?interval=1d&range=1d').then(r => r.json()).then(d => ({ price: d?.chart?.result?.[0]?.meta?.regularMarketPrice })) },
+    const checks = [
+      { name: 'Yahoo Finance v8 (RELIANCE)', url: '/api/market/quote?symbol=RELIANCE' },
+      { name: 'Market Indices (NIFTY 50)', url: '/api/market/indices' },
+      { name: 'Groq AI Research', url: '/api/groq/research?symbol=TCS' },
+      { name: 'Platform Stats', url: '/api/stats' },
+      { name: 'Admin Plans', url: '/api/admin/plans' },
     ];
+    setApiResults(checks.map(c => ({ name: c.name, status: 'pending' })));
 
-    for (let i = 0; i < apis.length; i++) {
-      const start = Date.now();
+    for (let i = 0; i < checks.length; i++) {
+      const start = performance.now();
       try {
-        const result = await apis[i].fn();
-        const latency = Date.now() - start;
-        setApiResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'success', latency, data: result } : r));
-      } catch (err: any) {
-        setApiResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'failed', message: err.message } : r));
+        const res = await fetch(checks[i].url);
+        const ms = Math.round(performance.now() - start);
+        const json = await res.json();
+        let detail = res.ok ? '✓ OK' : 'HTTP ' + res.status;
+        if (json.price) detail = `₹${json.price}`;
+        else if (json.indices) detail = `${json.indices.length} indices (${json.source})`;
+        else if (json.backtests !== undefined) detail = `${json.users} users · ${json.backtests} backtests`;
+        else if (json.plans) detail = `${json.plans.length} plans`;
+        else if (json.symbol) detail = `${json.symbol} report ready`;
+        setApiResults(prev => prev.map((r, j) => j === i ? { ...r, status: res.ok ? 'ok' : 'fail', ms, detail } : r));
+      } catch (e: unknown) {
+        const ms = Math.round(performance.now() - start);
+        const msg = e instanceof Error ? e.message : 'Network error';
+        setApiResults(prev => prev.map((r, j) => j === i ? { ...r, status: 'fail', ms, detail: msg } : r));
       }
     }
     setTesting(false);
   };
 
-  useEffect(() => {
-    if (activeTab === 'api-test') {
-      testAllAPIs();
-    }
-  }, [activeTab]);
-
   return (
-    <main className="pt-24 px-8 pb-16 max-w-[1320px] mx-auto">
+    <main className="pt-24 px-8 pb-16 max-w-[1320px] mx-auto page-enter">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-6 right-6 z-[100] px-5 py-3 rounded-xl shadow-xl font-ui text-sm text-white flex items-center gap-2 animate-fade-in-down ${toast.ok ? 'bg-emerald-700' : 'bg-red-600'}`}>
+          <span className="material-symbols-outlined text-[18px]">{toast.ok ? 'check_circle' : 'error'}</span>
+          {toast.msg}
+        </div>
+      )}
+
       <div className="mb-8">
         <span className="text-[10px] font-data uppercase tracking-[0.3em] text-[#795900]">Account</span>
         <h2 className="text-4xl font-headline text-[#00361a] mt-1">Settings</h2>
@@ -93,14 +169,11 @@ export default function SettingsPage() {
         {/* Sidebar */}
         <div className="col-span-3">
           <div className="glass-panel rounded-2xl p-2">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-ui text-sm transition-all ${activeTab === tab.id ? 'bg-[#1A4D2E] text-white' : 'text-stone-500 hover:bg-stone-100'}`}
-              >
-                <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
-                {tab.label}
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-ui text-sm transition-all ${tab === t.id ? 'bg-[#1A4D2E] text-white' : 'text-stone-500 hover:bg-stone-100'}`}>
+                <span className="material-symbols-outlined text-[18px]" style={tab === t.id ? { fontVariationSettings: "'FILL' 1" } : {}}>{t.icon}</span>
+                {t.label}
               </button>
             ))}
           </div>
@@ -108,181 +181,246 @@ export default function SettingsPage() {
 
         {/* Content */}
         <div className="col-span-9">
-          {activeTab === 'profile' && (
+          {loading ? (
             <div className="glass-panel p-8 rounded-2xl">
-              <h3 className="font-headline text-2xl text-[#00361a] mb-6">Profile Settings</h3>
-              <div className="space-y-6 max-w-lg">
-                <div>
-                  <label className="block text-xs font-ui font-bold text-[#4A5568] uppercase tracking-wider mb-2">Full Name</label>
-                  <input
-                    type="text"
-                    value={profile.fullName}
-                    onChange={(e) => setProfile({...profile, fullName: e.target.value})}
-                    className="w-full px-4 py-3 bg-white border border-[#E8E6DF] rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-ui font-bold text-[#4A5568] uppercase tracking-wider mb-2">Email</label>
-                  <input type="email" value={profile.email} disabled className="w-full px-4 py-3 bg-stone-100 border border-[#E8E6DF] rounded-lg text-stone-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-ui font-bold text-[#4A5568] uppercase tracking-wider mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    value={profile.phone}
-                    onChange={(e) => setProfile({...profile, phone: e.target.value})}
-                    className="w-full px-4 py-3 bg-white border border-[#E8E6DF] rounded-lg"
-                  />
-                </div>
-                <button className="px-6 py-3 bg-[#1A4D2E] text-white rounded-lg font-ui font-bold hover:bg-[#143D24] transition-all">
-                  Save Changes
-                </button>
+              <div className="space-y-4">
+                {[1,2,3].map(i => <div key={i} className="skeleton h-12 rounded-lg" />)}
               </div>
             </div>
-          )}
-
-          {activeTab === 'email' && (
-            <div className="space-y-6">
-              <div className="glass-panel p-8 rounded-2xl">
-                <h3 className="font-headline text-2xl text-[#00361a] mb-6">Digest Frequency</h3>
-                <div className="flex flex-wrap gap-3">
-                  {['1h', '2h', '3h', '4h', '6h', '12h', '24h'].map(freq => (
-                    <button
-                      key={freq}
-                      onClick={() => setEmailPrefs({...emailPrefs, digestFrequency: freq})}
-                      className={`px-6 py-3 rounded-xl font-ui text-sm font-bold border-2 transition-all ${emailPrefs.digestFrequency === freq ? 'bg-[#1A4D2E] text-white border-[#1A4D2E]' : 'border-[#E8E6DF] text-stone-500 hover:border-[#1A4D2E]'}`}
-                    >
-                      {freq === '24h' ? 'Daily' : `Every ${freq}`}
+          ) : (
+            <>
+              {/* ── Profile ── */}
+              {tab === 'profile' && (
+                <div className="glass-panel p-8 rounded-2xl animate-fade-in">
+                  <h3 className="font-headline text-2xl text-[#00361a] mb-6">Profile Settings</h3>
+                  <div className="space-y-5 max-w-lg">
+                    <div>
+                      <label className="block text-xs font-ui font-bold text-stone-500 uppercase tracking-wider mb-2">Full Name</label>
+                      <input type="text" value={profile.full_name}
+                        onChange={e => setProfile({ ...profile, full_name: e.target.value })}
+                        className="w-full px-4 py-3 bg-white border border-[#E8E6DF] rounded-lg font-body focus:outline-none input-glow transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-ui font-bold text-stone-500 uppercase tracking-wider mb-2">Email</label>
+                      <input type="email" value={profile.email} disabled
+                        className="w-full px-4 py-3 bg-stone-100 border border-stone-200 rounded-lg text-stone-400 cursor-not-allowed" />
+                      <p className="text-[10px] text-stone-400 mt-1">Email is managed by authentication and cannot be changed here</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-ui font-bold text-stone-500 uppercase tracking-wider mb-2">Phone Number</label>
+                      <input type="tel" value={profile.phone}
+                        onChange={e => setProfile({ ...profile, phone: e.target.value })}
+                        placeholder="+91 98765 43210"
+                        className="w-full px-4 py-3 bg-white border border-[#E8E6DF] rounded-lg font-body focus:outline-none input-glow transition-all" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-ui font-bold text-stone-500 uppercase tracking-wider mb-2">Timezone</label>
+                      <select value={profile.timezone}
+                        onChange={e => setProfile({ ...profile, timezone: e.target.value })}
+                        className="w-full px-4 py-3 bg-white border border-[#E8E6DF] rounded-lg font-body focus:outline-none input-glow transition-all">
+                        <option value="Asia/Kolkata">IST — Asia/Kolkata (UTC+5:30)</option>
+                        <option value="UTC">UTC</option>
+                        <option value="America/New_York">EST — New York</option>
+                        <option value="Europe/London">GMT — London</option>
+                      </select>
+                    </div>
+                    <button onClick={saveProfile} disabled={saving}
+                      className="px-6 py-3 bg-[#1A4D2E] text-white rounded-lg font-ui font-bold hover:bg-[#143D24] transition-all disabled:opacity-50 btn-press">
+                      {saving ? 'Saving...' : 'Save Changes'}
                     </button>
-                  ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="glass-panel p-8 rounded-2xl">
-                <h3 className="font-headline text-2xl text-[#00361a] mb-6">What's Included</h3>
-                <div className="space-y-4">
-                  {[
-                    { key: 'includeNifty50', label: 'Nifty 50 Snapshot', desc: 'Daily index performance and key levels' },
-                    { key: 'includeWatchlist', label: 'Your Watchlist Movers', desc: 'Price changes for stocks you track' },
-                    { key: 'includeAiPicks', label: 'AI Stock Picks', desc: 'Curated opportunities from our AI' },
-                    { key: 'includeNews', label: 'Key Financial News', desc: 'Top stories from Indian markets' },
-                    { key: 'includeMacro', label: 'Macro Indicators', desc: 'USD/INR, Bond yields, FII/DII data' },
-                  ].map(item => (
-                    <div key={item.key} className="flex items-center justify-between p-4 bg-white rounded-xl border border-[#E8E6DF]">
+              {/* ── Email Prefs ── */}
+              {tab === 'email' && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="glass-panel p-8 rounded-2xl">
+                    <h3 className="font-headline text-2xl text-[#00361a] mb-2">Email Digest Settings</h3>
+                    <p className="text-sm text-stone-500 mb-6">Configure AI-curated market intelligence delivered to your inbox</p>
+
+                    {/* Master toggle */}
+                    <div className="flex items-center justify-between p-4 bg-[#1A4D2E]/5 rounded-xl border border-[#1A4D2E]/10 mb-6">
                       <div>
-                        <p className="font-ui font-bold text-[#0F1A14]">{item.label}</p>
-                        <p className="text-xs font-body text-stone-500">{item.desc}</p>
+                        <p className="font-ui font-bold text-stone-800">Email Digest</p>
+                        <p className="text-xs text-stone-500">Receive regular market summaries via email</p>
                       </div>
-                      <button
-                        onClick={() => setEmailPrefs({...emailPrefs, [item.key]: !emailPrefs[item.key as keyof typeof emailPrefs]})}
-                        className={`w-12 h-6 rounded-full transition-all ${emailPrefs[item.key as keyof typeof emailPrefs] ? 'bg-emerald-500' : 'bg-stone-200'}`}
-                      >
-                        <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${emailPrefs[item.key as keyof typeof emailPrefs] ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                      <button onClick={() => setEmailPrefs(p => ({ ...p, digest_enabled: !p.digest_enabled }))}
+                        className={`w-12 h-6 rounded-full transition-all ${emailPrefs.digest_enabled ? 'bg-[#1A4D2E]' : 'bg-stone-300'}`}>
+                        <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${emailPrefs.digest_enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
                       </button>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              <button className="px-8 py-4 bg-[#1A4D2E] text-white rounded-xl font-ui font-bold hover:bg-[#143D24] transition-all shadow-lg shadow-[#1A4D2E]/20">
-                Save Preferences
-              </button>
-            </div>
-          )}
+                    {/* Frequency */}
+                    <div className="mb-6">
+                      <label className="block text-xs font-ui font-bold text-stone-500 uppercase tracking-wider mb-3">Digest Frequency</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['1h', '2h', '4h', '6h', '12h', '24h'].map(freq => (
+                          <button key={freq}
+                            onClick={() => setEmailPrefs(p => ({ ...p, digest_frequency: freq }))}
+                            className={`px-4 py-2 rounded-lg text-sm font-ui font-bold transition-all border-2 ${emailPrefs.digest_frequency === freq ? 'bg-[#1A4D2E] text-white border-[#1A4D2E]' : 'border-stone-200 text-stone-500 hover:border-[#1A4D2E]/40'}`}>
+                            {freq === '24h' ? 'Daily' : `Every ${freq}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
-          {activeTab === 'security' && (
-            <div className="glass-panel p-8 rounded-2xl">
-              <h3 className="font-headline text-2xl text-[#00361a] mb-6">Security Settings</h3>
-              <div className="space-y-6 max-w-lg">
-                <div className="p-4 bg-stone-50 rounded-xl">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="material-symbols-outlined text-emerald-600">check_circle</span>
-                    <span className="font-ui font-bold text-[#0F1A14]">Password</span>
+                    {/* Content toggles */}
+                    <div className="space-y-3">
+                      {[
+                        { key: 'include_nifty50', label: 'Nifty 50 Snapshot', desc: 'Daily index performance and key resistance/support levels' },
+                        { key: 'include_watchlist', label: 'Watchlist Movers', desc: 'Price changes for stocks you follow' },
+                        { key: 'include_ai_picks', label: 'AI Stock Picks', desc: 'Algorithmic opportunities identified by our research engine' },
+                        { key: 'include_news', label: 'Market News', desc: 'Top financial stories from NSE, BSE, and corporate actions' },
+                        { key: 'include_macro', label: 'Macro Indicators', desc: 'USD/INR, bond yields, FII/DII flows, RBI data' },
+                      ].map(item => (
+                        <div key={item.key} className="flex items-center justify-between p-4 bg-white rounded-xl border border-stone-100 hover:border-stone-200 transition-all">
+                          <div>
+                            <p className="font-ui font-bold text-sm text-stone-800">{item.label}</p>
+                            <p className="text-xs text-stone-500">{item.desc}</p>
+                          </div>
+                          <button
+                            onClick={() => setEmailPrefs(p => ({ ...p, [item.key]: !p[item.key as keyof EmailPrefs] }))}
+                            className={`w-12 h-6 rounded-full transition-all flex-shrink-0 ${emailPrefs[item.key as keyof EmailPrefs] ? 'bg-emerald-500' : 'bg-stone-300'}`}>
+                            <div className={`w-5 h-5 bg-white rounded-full shadow-sm transition-transform ${emailPrefs[item.key as keyof EmailPrefs] ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button onClick={saveEmailPrefs} disabled={saving}
+                      className="mt-6 px-8 py-3 bg-[#1A4D2E] text-white rounded-xl font-ui font-bold hover:bg-[#143D24] transition-all shadow-lg shadow-[#1A4D2E]/20 disabled:opacity-50 btn-press">
+                      {saving ? 'Saving...' : 'Save Preferences'}
+                    </button>
                   </div>
-                  <p className="text-sm font-body text-stone-500">Last changed 30 days ago</p>
                 </div>
-                <button className="px-6 py-3 border border-[#1A4D2E] text-[#1A4D2E] rounded-lg font-ui font-bold hover:bg-[#1A4D2E] hover:text-white transition-all">
-                  Change Password
-                </button>
-              </div>
-            </div>
-          )}
+              )}
 
-          {activeTab === 'billing' && (
-            <div className="glass-panel p-8 rounded-2xl">
-              <h3 className="font-headline text-2xl text-[#00361a] mb-6">Current Plan</h3>
-              <div className="inline-flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-[#D4A843] to-[#F0C040] rounded-xl">
-                <span className="material-symbols-outlined text-[#0F1A14]" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
-                <span className="font-ui font-bold text-[#0F1A14]">PRO ANALYST</span>
-              </div>
-              <p className="mt-4 text-stone-500 font-body">₹1,499/month • Billed monthly</p>
-              <button className="mt-6 px-6 py-3 bg-[#1A4D2E] text-white rounded-lg font-ui font-bold hover:bg-[#143D24] transition-all">
-                Manage Subscription
-              </button>
-            </div>
-          )}
-
-          {activeTab === 'api-test' && (
-            <div className="space-y-6">
-              <div className="glass-panel p-8 rounded-2xl">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="font-headline text-2xl text-[#00361a]">API Diagnostics</h3>
-                    <p className="text-sm font-body text-stone-500 mt-1">Test all internal and external APIs</p>
-                  </div>
-                  <button
-                    onClick={testAllAPIs}
-                    disabled={testing}
-                    className="px-6 py-3 bg-[#1A4D2E] text-white rounded-lg font-ui font-bold hover:bg-[#143D24] transition-all disabled:opacity-50 flex items-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">{testing ? 'sync' : 'play_arrow'}</span>
-                    {testing ? 'Testing...' : 'Test All APIs'}
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {apiResults.map((api, idx) => (
-                    <div key={idx} className="p-4 bg-white rounded-xl border border-[#E8E6DF] flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-3 h-3 rounded-full ${
-                          api.status === 'success' ? 'bg-green-500' :
-                          api.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'
-                        }`} />
+              {/* ── Security ── */}
+              {tab === 'security' && (
+                <div className="glass-panel p-8 rounded-2xl animate-fade-in">
+                  <h3 className="font-headline text-2xl text-[#00361a] mb-6">Security</h3>
+                  <div className="space-y-4 max-w-lg">
+                    <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                      <span className="material-symbols-outlined text-emerald-600" style={{ fontVariationSettings: "'FILL' 1" }}>verified_user</span>
+                      <div>
+                        <p className="font-ui font-bold text-emerald-800">Email verified</p>
+                        <p className="text-xs text-emerald-700">{profile.email}</p>
+                      </div>
+                    </div>
+                    <Link href="/auth/update-password"
+                      className="flex items-center justify-between w-full p-4 border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-stone-500">lock</span>
                         <div>
-                          <p className="font-ui font-bold text-[#0F1A14]">{api.name}</p>
-                          {api.latency && <p className="text-xs text-stone-500">{api.latency}ms latency</p>}
-                          {api.message && <p className="text-xs text-red-500">{api.message}</p>}
-                          {api.data && api.data.price && <p className="text-xs text-green-600">Price: ₹{api.data.price}</p>}
-                          {api.data && api.data.data && <p className="text-xs text-green-600">Records: {api.data.data}</p>}
-                          {api.data && api.data.indices && <p className="text-xs text-green-600">Indices: {api.data.indices.length}</p>}
+                          <p className="font-ui font-bold text-sm text-stone-800">Change Password</p>
+                          <p className="text-xs text-stone-500">Update your account password</p>
                         </div>
                       </div>
-                      <span className={`font-ui text-xs font-bold px-3 py-1 rounded-full ${
-                        api.status === 'success' ? 'bg-green-100 text-green-700' :
-                        api.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {api.status.toUpperCase()}
-                      </span>
-                    </div>
-                  ))}
+                      <span className="material-symbols-outlined text-stone-400 group-hover:text-stone-600 transition-colors">chevron_right</span>
+                    </Link>
+                    <Link href="/auth/logout"
+                      className="flex items-center justify-between w-full p-4 border border-red-200 rounded-xl hover:bg-red-50 transition-colors group">
+                      <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-red-400">logout</span>
+                        <div>
+                          <p className="font-ui font-bold text-sm text-red-600">Sign Out</p>
+                          <p className="text-xs text-stone-500">Sign out from all devices</p>
+                        </div>
+                      </div>
+                      <span className="material-symbols-outlined text-red-300 group-hover:text-red-500 transition-colors">chevron_right</span>
+                    </Link>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="glass-panel p-8 rounded-2xl">
-                <h3 className="font-headline text-xl text-[#00361a] mb-4">Quick Test</h3>
-                <div className="flex flex-wrap gap-3">
-                  <button onClick={() => fetch('/api/market/quote?symbol=RELIANCE').then(r => r.json()).then(console.log)} className="px-4 py-2 border border-[#E8E6DF] rounded-lg font-ui text-sm hover:bg-stone-50">
-                    Test RELIANCE Quote
-                  </button>
-                  <button onClick={() => fetch('/api/market/indices').then(r => r.json()).then(console.log)} className="px-4 py-2 border border-[#E8E6DF] rounded-lg font-ui text-sm hover:bg-stone-50">
-                    Test Indices
-                  </button>
-                  <button onClick={() => supabase.from('subscription_plans').select('*').then(console.log)} className="px-4 py-2 border border-[#E8E6DF] rounded-lg font-ui text-sm hover:bg-stone-50">
-                    Test Supabase
-                  </button>
+              {/* ── Billing ── */}
+              {tab === 'billing' && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="glass-panel p-8 rounded-2xl">
+                    <h3 className="font-headline text-2xl text-[#00361a] mb-6">Current Plan</h3>
+                    <div className={`p-5 rounded-xl border-2 inline-flex items-center gap-4 mb-6 ${
+                      profile.plan === 'pro' || profile.plan === 'institution'
+                        ? 'border-amber-300 bg-amber-50'
+                        : 'border-stone-200 bg-stone-50'
+                    }`}>
+                      <span className={`material-symbols-outlined text-[32px] ${
+                        profile.plan === 'pro' || profile.plan === 'institution' ? 'text-amber-600' : 'text-stone-400'
+                      }`} style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                      <div>
+                        <p className="font-headline text-xl text-[#00361a]">{profile.plan?.toUpperCase() ?? 'EXPLORER'}</p>
+                        <p className="text-xs text-stone-500">
+                          {profile.plan === 'explorer' ? 'Free plan — 5 backtests/month' :
+                           profile.plan === 'researcher' ? '₹499/month · 50 backtests' :
+                           profile.plan === 'pro' ? '₹1,499/month · Unlimited backtests' :
+                           '₹4,999/month · Enterprise'}
+                        </p>
+                      </div>
+                    </div>
+                    <Link href="/pricing"
+                      className="flex items-center gap-2 w-fit px-6 py-3 bg-[#1A4D2E] text-white rounded-xl font-ui font-bold hover:bg-[#143D24] transition-all shadow-lg shadow-[#1A4D2E]/20 btn-press">
+                      <span className="material-symbols-outlined text-[18px]">workspace_premium</span>
+                      {profile.plan === 'explorer' ? 'Upgrade Plan' : 'Manage Subscription'}
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            </div>
+              )}
+
+              {/* ── Diagnostics ── */}
+              {tab === 'diagnostics' && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="glass-panel p-8 rounded-2xl">
+                    <div className="flex items-center justify-between mb-6">
+                      <div>
+                        <h3 className="font-headline text-2xl text-[#00361a]">API Diagnostics</h3>
+                        <p className="text-sm text-stone-500 mt-1">Test all platform APIs and external services</p>
+                      </div>
+                      <button onClick={testAllAPIs} disabled={testing}
+                        className="px-5 py-2.5 bg-[#1A4D2E] text-white rounded-lg font-ui font-bold hover:bg-[#143D24] transition-all disabled:opacity-50 flex items-center gap-2 btn-press">
+                        <span className={`material-symbols-outlined text-[18px] ${testing ? 'animate-spin' : ''}`}>
+                          {testing ? 'sync' : 'play_arrow'}
+                        </span>
+                        {testing ? 'Running...' : 'Run All Tests'}
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {apiResults.length === 0 && (
+                        <div className="text-center py-8">
+                          <span className="material-symbols-outlined text-[36px] text-stone-300 block mb-2">api</span>
+                          <p className="text-stone-400 text-sm">Click "Run All Tests" to check API health</p>
+                        </div>
+                      )}
+                      {apiResults.map((api, i) => (
+                        <div key={i} className="flex items-center justify-between p-4 bg-white rounded-xl border border-stone-100">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                              api.status === 'ok' ? 'bg-emerald-500' :
+                              api.status === 'fail' ? 'bg-red-500' : 'bg-amber-400 animate-pulse'
+                            }`} />
+                            <div>
+                              <p className="font-ui font-bold text-sm text-stone-800">{api.name}</p>
+                              {api.detail && <p className={`text-xs mt-0.5 ${api.status === 'ok' ? 'text-emerald-600' : 'text-red-500'}`}>{api.detail}</p>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            {api.ms && <span className={`text-xs font-data font-bold ${api.ms < 1000 ? 'text-emerald-600' : api.ms < 3000 ? 'text-amber-600' : 'text-red-600'}`}>{api.ms}ms</span>}
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded ${
+                              api.status === 'ok' ? 'bg-emerald-100 text-emerald-700' :
+                              api.status === 'fail' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                            }`}>{api.status === 'ok' ? 'HEALTHY' : api.status === 'fail' ? 'FAILED' : 'RUNNING'}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 text-center">
+                      <Link href="/admin/api-tester" className="text-xs font-ui font-bold text-[#1A4D2E] hover:underline">
+                        Advanced API Tester (Admin) →
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

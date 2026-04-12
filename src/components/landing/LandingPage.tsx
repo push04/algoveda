@@ -220,8 +220,9 @@ function FeatureCard({ icon, title, desc, delay }: { icon:string; title:string; 
 ───────────────────────────────────────────────────────── */
 function PricingCard({ plan, onToast }: { plan: Plan; onToast: (ok: boolean, msg: string) => void }) {
   const { ref, inView } = useInView(0.1);
-  const popular = plan.slug === 'pro';
+  const popular = plan.slug === 'pro' || plan.slug === 'starter'; // starter is special
   const isFree  = plan.price_monthly === 0;
+  const isStarter = plan.slug === 'starter';
   const [paying, setPaying] = useState(false);
 
   const handleClick = async () => {
@@ -241,7 +242,12 @@ function PricingCard({ plan, onToast }: { plan: Plan; onToast: (ok: boolean, msg
         ${inView ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
       style={{ borderWidth: popular ? 2 : 1 }}
     >
-      {popular && (
+      {isStarter && (
+        <div className="absolute top-0 right-0 bg-red-600 px-3 py-1 text-[8px] font-bold text-white uppercase tracking-widest animate-pulse">
+          ⚡ ₹2 LAUNCH OFFER - First 1000 Users!
+        </div>
+      )}
+      {popular && !isStarter && (
         <div className="absolute top-0 right-0 bg-secondary px-3 py-1 text-[8px] font-bold text-white uppercase tracking-widest">
           Most Popular
         </div>
@@ -249,9 +255,9 @@ function PricingCard({ plan, onToast }: { plan: Plan; onToast: (ok: boolean, msg
       <div className="p-8">
         <div className="font-ui text-[10px] uppercase tracking-widest mb-2 text-stone-400">{plan.name}</div>
         <div className="font-headline text-3xl text-primary mb-1">
-          {isFree ? 'Free' : `₹${(plan.price_monthly / 100).toLocaleString('en-IN')}`}
+          {isFree ? 'Free' : isStarter ? '₹2' : `₹${(plan.price_monthly / 100).toLocaleString('en-IN')}`}
         </div>
-        {!isFree && <div className="font-ui text-[10px] text-stone-400 mb-6">per month</div>}
+        {!isFree && <div className="font-ui text-[10px] text-stone-400 mb-6">{isStarter ? 'one-time - Learn A to Z' : 'per month'}</div>}
         {isFree && <div className="mb-6 h-4" />}
 
         <ul className="space-y-3 mb-8">
@@ -398,6 +404,7 @@ export default function LandingPage() {
 
   // Fallback pricing if DB unavailable
   const FALLBACK_PLANS: Plan[] = [
+    { id:'p0', name:'Starter - ₹2', slug:'starter', price_monthly:2, price_yearly:null, features:['Complete Stock Market A-Z Course','50+ Interactive Lessons','AI MCQ Generator','Certificate on Completion'], is_active:true, sort_order:0 },
     { id:'p1', name:'Explorer',    slug:'explorer',    price_monthly:0,      price_yearly:null,    features:['5 Backtests/day','Basic Screener','Delayed Data','Daily Digest'], is_active:true, sort_order:1 },
     { id:'p2', name:'Researcher',  slug:'researcher',  price_monthly:49900,  price_yearly:499000,  features:['20 Backtests/month','Full Screener','AI Rationale','4hr Digest'], is_active:true, sort_order:2 },
     { id:'p3', name:'Pro Analyst', slug:'pro',         price_monthly:149900, price_yearly:1499000, features:['Unlimited Backtests','Portfolio Analytics','1hr Digest','Priority Support','API Access'], is_active:true, sort_order:3 },
