@@ -1,12 +1,22 @@
 'use client';
 
 import { createClient } from '@/lib/supabase/client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+interface APIResult {
+  name: string;
+  status: 'pending' | 'success' | 'failed';
+  message?: string;
+  data?: any;
+  latency?: number;
+}
 
 export default function SettingsPage() {
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState('profile');
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [apiResults, setApiResults] = useState<APIResult[]>([]);
 
   const [profile, setProfile] = useState({
     fullName: 'Pushpal S.',
@@ -30,7 +40,47 @@ export default function SettingsPage() {
     { id: 'email', label: 'Email Preferences', icon: 'mail' },
     { id: 'security', label: 'Security', icon: 'shield' },
     { id: 'billing', label: 'Billing', icon: 'credit_card' },
+    { id: 'api-test', label: 'API Diagnostics', icon: 'api' },
   ];
+
+  const testAllAPIs = async () => {
+    setTesting(true);
+    setApiResults([
+      { name: 'Market Quote API', status: 'pending' },
+      { name: 'Market Indices API', status: 'pending' },
+      { name: 'Backtest API', status: 'pending' },
+      { name: 'Supabase DB', status: 'pending' },
+      { name: 'NSE India (External)', status: 'pending' },
+      { name: 'Yahoo Finance (External)', status: 'pending' },
+    ]);
+
+    const apis = [
+      { name: 'Market Quote API', fn: () => fetch('/api/market/quote?symbol=RELIANCE').then(r => r.json()) },
+      { name: 'Market Indices API', fn: () => fetch('/api/market/indices').then(r => r.json()) },
+      { name: 'Backtest API', fn: () => fetch('/api/backtest').then(r => r.json()).catch(e => ({ error: e.message })) },
+      { name: 'Supabase DB', fn: () => supabase.from('subscription_plans').select('*').then(r => ({ data: r.data?.length || 0 })) },
+      { name: 'NSE India (External)', fn: () => fetch('https://www.nseindia.com/api/quoteEquity?symbol=RELIANCE&section=info').then(r => ({ status: r.ok })) },
+      { name: 'Yahoo Finance (External)', fn: () => fetch('https://query1.finance.yahoo.com/v8/finance/chart/RELIANCE.NS?interval=1d&range=1d').then(r => r.json()).then(d => ({ price: d?.chart?.result?.[0]?.meta?.regularMarketPrice })) },
+    ];
+
+    for (let i = 0; i < apis.length; i++) {
+      const start = Date.now();
+      try {
+        const result = await apis[i].fn();
+        const latency = Date.now() - start;
+        setApiResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'success', latency, data: result } : r));
+      } catch (err: any) {
+        setApiResults(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'failed', message: err.message } : r));
+      }
+    }
+    setTesting(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'api-test') {
+      testAllAPIs();
+    }
+  }, [activeTab]);
 
   return (
     <main className="pt-24 px-8 pb-16 max-w-[1320px] mx-auto">
@@ -169,6 +219,69 @@ export default function SettingsPage() {
               <button className="mt-6 px-6 py-3 bg-[#1A4D2E] text-white rounded-lg font-ui font-bold hover:bg-[#143D24] transition-all">
                 Manage Subscription
               </button>
+            </div>
+          )}
+
+          {activeTab === 'api-test' && (
+            <div className="space-y-6">
+              <div className="glass-panel p-8 rounded-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="font-headline text-2xl text-[#00361a]">API Diagnostics</h3>
+                    <p className="text-sm font-body text-stone-500 mt-1">Test all internal and external APIs</p>
+                  </div>
+                  <button
+                    onClick={testAllAPIs}
+                    disabled={testing}
+                    className="px-6 py-3 bg-[#1A4D2E] text-white rounded-lg font-ui font-bold hover:bg-[#143D24] transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">{testing ? 'sync' : 'play_arrow'}</span>
+                    {testing ? 'Testing...' : 'Test All APIs'}
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {apiResults.map((api, idx) => (
+                    <div key={idx} className="p-4 bg-white rounded-xl border border-[#E8E6DF] flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-3 h-3 rounded-full ${
+                          api.status === 'success' ? 'bg-green-500' :
+                          api.status === 'failed' ? 'bg-red-500' : 'bg-yellow-500 animate-pulse'
+                        }`} />
+                        <div>
+                          <p className="font-ui font-bold text-[#0F1A14]">{api.name}</p>
+                          {api.latency && <p className="text-xs text-stone-500">{api.latency}ms latency</p>}
+                          {api.message && <p className="text-xs text-red-500">{api.message}</p>}
+                          {api.data && api.data.price && <p className="text-xs text-green-600">Price: ₹{api.data.price}</p>}
+                          {api.data && api.data.data && <p className="text-xs text-green-600">Records: {api.data.data}</p>}
+                          {api.data && api.data.indices && <p className="text-xs text-green-600">Indices: {api.data.indices.length}</p>}
+                        </div>
+                      </div>
+                      <span className={`font-ui text-xs font-bold px-3 py-1 rounded-full ${
+                        api.status === 'success' ? 'bg-green-100 text-green-700' :
+                        api.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {api.status.toUpperCase()}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="glass-panel p-8 rounded-2xl">
+                <h3 className="font-headline text-xl text-[#00361a] mb-4">Quick Test</h3>
+                <div className="flex flex-wrap gap-3">
+                  <button onClick={() => fetch('/api/market/quote?symbol=RELIANCE').then(r => r.json()).then(console.log)} className="px-4 py-2 border border-[#E8E6DF] rounded-lg font-ui text-sm hover:bg-stone-50">
+                    Test RELIANCE Quote
+                  </button>
+                  <button onClick={() => fetch('/api/market/indices').then(r => r.json()).then(console.log)} className="px-4 py-2 border border-[#E8E6DF] rounded-lg font-ui text-sm hover:bg-stone-50">
+                    Test Indices
+                  </button>
+                  <button onClick={() => supabase.from('subscription_plans').select('*').then(console.log)} className="px-4 py-2 border border-[#E8E6DF] rounded-lg font-ui text-sm hover:bg-stone-50">
+                    Test Supabase
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

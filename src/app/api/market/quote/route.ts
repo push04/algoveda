@@ -29,24 +29,34 @@ export async function GET(request: Request) {
 
 async function fetchNSEData(symbol: string): Promise<any> {
   try {
-    const cleanSymbol = symbol.replace('.NS', '').replace('-eq', '');
+    const cleanSymbol = symbol.replace('.NS', '').replace('-eq', '').replace('.NS', '');
     
     // NSE Quote API (official)
     const response = await fetch(
       `https://www.nseindia.com/api/quoteEquity?symbol=${cleanSymbol}&section=info`,
       {
         headers: {
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Accept': 'application/json',
+          'Accept-Language': 'en-US,en;q=0.9',
           'Referer': 'https://www.nseindia.com/',
+          'Origin': 'https://www.nseindia.com',
         },
         next: { revalidate: 30 }
       }
     );
     
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.log('NSE response not ok:', response.status);
+      return null;
+    }
     
     const data = await response.json();
+    
+    if (!data || !data.priceInfo) {
+      console.log('NSE data missing priceInfo');
+      return null;
+    }
     
     return {
       symbol: data.metadata?.symbol || cleanSymbol,
@@ -61,6 +71,7 @@ async function fetchNSEData(symbol: string): Promise<any> {
       source: 'nse',
     };
   } catch (error) {
+    console.log('NSE fetch error:', error);
     return null;
   }
 }
