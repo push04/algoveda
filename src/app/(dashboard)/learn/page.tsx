@@ -32,6 +32,8 @@ export default function LearnPage() {
   const [quizComplete, setQuizComplete] = useState(false);
   const [loading, setLoading] = useState(true);
   const [unlocked, setUnlocked] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
 
   const supabase = createClient();
 
@@ -40,14 +42,30 @@ export default function LearnPage() {
   }, []);
 
   async function checkUser() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      setUser(user);
-      const { data } = await supabase.from('users').select('quiz_score, education_unlocked').eq('id', user.id).single();
-      if (data) {
-        setScore(data.quiz_score || 0);
-        setUnlocked(data.education_unlocked || false);
-      }
+    const { data: { user: u } } = await supabase.auth.getUser();
+    if (!u) {
+      setLoading(false);
+      return;
+    }
+    setUser(u);
+
+    // Check subscription status
+    const { data: sub } = await supabase
+      .from('user_subscriptions')
+      .select('status, plans:plan_id(slug)')
+      .eq('user_id', u.id)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle();
+
+    const hasStarterPlan = !!(sub?.plans && (sub.plans as any).slug === 'starter');
+    setSubscribed(hasStarterPlan);
+
+    // Get user quiz data
+    const { data } = await supabase.from('profiles').select('quiz_score').eq('id', u.id).single();
+    if (data) {
+      setScore(data.quiz_score || 0);
+      // Unlocked if subscribed to Starter plan
+      setUnlocked(hasStarterPlan);
     }
     fetchData();
   }
@@ -63,6 +81,10 @@ export default function LearnPage() {
   }
 
   function startQuiz(slug: string) {
+    if (!subscribed) {
+      setShowLockModal(true);
+      return;
+    }
     setActiveQuiz(slug);
     setCurrentQ(0);
     setAnswers([]);
@@ -217,6 +239,36 @@ export default function LearnPage() {
                   </Link>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Lock Modal for non-subscribed users */}
+        {showLockModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-8 max-w-md w-full text-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="material-symbols-outlined text-amber-600 text-3xl">lock</span>
+              </div>
+              <h2 className="font-headline text-2xl mb-2">Learning Content Locked</h2>
+              <p className="text-stone-600 mb-4">
+                Subscribe to the Rs 2 Starter plan to unlock all learning modules and quizzes.
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+                <div className="text-3xl font-bold text-amber-700">Rs 2</div>
+                <div className="text-sm text-amber-600">one-time payment</div>
+                <ul className="text-left text-sm mt-3 space-y-1">
+                  <li>Complete Stock Market A-Z Course</li>
+                  <li>AI-Powered Quiz Generator</li>
+                  <li>Unlock Rs 1 Lakh Paper Trading</li>
+                </ul>
+              </div>
+              <Link href="/pricing" className="block w-full py-3 bg-primary text-white rounded-lg font-ui hover:bg-primary/90 mb-3">
+                Subscribe Now - Rs 2
+              </Link>
+              <button onClick={() => setShowLockModal(false)} className="text-stone-500 text-sm">
+                Maybe later
+              </button>
             </div>
           </div>
         )}

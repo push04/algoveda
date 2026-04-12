@@ -44,16 +44,32 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error, data } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      setError(error.message);
+      // Check for email not confirmed error
+      if (error.message.includes('Email not confirmed') || error.message.includes('confirm your email')) {
+        setError('Please confirm your email first. Check your inbox for the confirmation link.');
+      } else if (error.message.includes('Invalid login') || error.message.includes('invalid')) {
+        setError('Invalid email or password. Please try again.');
+      } else if (error.message.includes('Too many requests')) {
+        setError('Too many attempts. Please wait a minute and try again.');
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
     } else {
-      router.push('/dashboard');
+      // Login successful - check if email is confirmed
+      if (data.user && !data.user.email_confirmed_at) {
+        setError('Please confirm your email first. Check your inbox for the confirmation link.');
+        await supabase.auth.signOut();
+        setLoading(false);
+      } else {
+        router.push('/dashboard');
+      }
     }
   };
 

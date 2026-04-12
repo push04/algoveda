@@ -77,6 +77,19 @@ export async function POST(request: Request) {
       .update({ plan: plan?.name ?? 'standard', updated_at: now.toISOString() })
       .eq('id', user.id);
 
+    // Create paper trading portfolio with Rs 100,000 balance for Starter plan
+    const isStarter = plan?.name?.toLowerCase().includes('starter');
+    if (isStarter) {
+      await supabase.from('portfolios').insert({
+        user_id: user.id,
+        name: 'My Paper Portfolio',
+        type: 'paper',
+        initial_capital: 100000,
+        current_cash: 100000,
+        is_active: true,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       subscription: sub,

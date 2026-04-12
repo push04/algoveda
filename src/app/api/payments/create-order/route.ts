@@ -40,9 +40,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cannot create order for free plan' }, { status: 400 });
     }
 
-    // Create Razorpay order (amount in paise)
+    // Create Razorpay order (amount in paise - multiply rupees by 100)
+    const amountInPaise = amount;
     const order = await razorpay.orders.create({
-      amount: amount, // already in paise
+      amount: amountInPaise,
       currency: 'INR',
       receipt: `av_${user.id.slice(0, 8)}_${Date.now()}`,
       notes: {

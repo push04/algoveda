@@ -1,8 +1,9 @@
-feat: Fix Starter plan flow and add random stock on login
+feat: Fix login, subscription, and paper trading
 
-- Fix Starter ($2) plan: check subscription status, redirect to /learn if already subscribed
-- Add $2 instant access (no Razorpay needed for small amount)
-- Show random stock with real-time price on login page using market API
-- User must login first before subscribing to any plan
+- Add email confirmation check on login with proper error messages
+- Lock Learn page for non-subscribed users with payment modal
+- Give Rs 100k paper trading only after Starter plan purchase
+- Update handle_new_user to NOT create portfolio automatically
+- Create portfolio only after successful payment
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
