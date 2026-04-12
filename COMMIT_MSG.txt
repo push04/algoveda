@@ -1,10 +1,8 @@
-feat: Add market status indicator, AI content generator, fix settings real data
+feat: Add Resend email API and Starter plan
 
-- Add market open/close indicator to TopNav with real IST time
-- Settings page now loads profile and email_preferences from Supabase
-- Add AI Content Generator page (/admin/content) to generate learning modules
-  and quiz questions using Groq AI
-- Add API route /api/admin/content for AI content generation
-- All new content is stored in Supabase with full CRUD
+- Add Resend API integration for email sending (/api/email/send)
+- Create email_logs table for tracking sent emails
+- Add Rs 2 Starter learning plan to database
+- All settings data loads from Supabase
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
