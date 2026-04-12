@@ -18,6 +18,7 @@ const NAV_ITEMS = [
 ];
 
 const ADMIN_ITEMS = [
+  { href: '/admin/overview', icon: 'monitor_heart', label: 'System Overview' },
   { href: '/admin/plans', icon: 'workspace_premium', label: 'Manage Plans' },
   { href: '/admin/api-tester', icon: 'api', label: 'Live API Tester' },
 ];

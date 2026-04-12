@@ -1,10 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+export async function proxy(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,12 +13,8 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value);
-          });
-          supabaseResponse = NextResponse.next({
-            request,
-          });
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
@@ -30,24 +24,31 @@ export async function middleware(request: NextRequest) {
   );
 
   const { data: { user } } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
 
-  // Public routes that don't require authentication
-  const publicRoutes = ['/', '/auth/login', '/auth/signup', '/auth/callback'];
-  const isPublicRoute = publicRoutes.some(route => 
-    pathname === route || pathname.startsWith('/api/') || pathname.startsWith('/pricing')
+  // Public routes — no auth required
+  const publicPrefixes = [
+    '/',
+    '/auth/',
+    '/api/',
+    '/pricing',
+    '/_next/',
+    '/favicon',
+  ];
+  const isPublic = publicPrefixes.some(p =>
+    p.endsWith('/') ? pathname.startsWith(p) : pathname === p
   );
 
-  // Protected routes
-  if (!isPublicRoute && !user) {
+  // Auth-only pages users shouldn't see if already logged in
+  const authOnlyPages = ['/auth/login', '/auth/signup'];
+
+  if (!isPublic && !user) {
     const url = new URL('/auth/login', request.url);
     url.searchParams.set('redirect', pathname);
     return NextResponse.redirect(url);
   }
 
-  // If user is logged in and tries to access auth pages, redirect to dashboard
-  if (user && (pathname === '/auth/login' || pathname === '/auth/signup')) {
+  if (user && authOnlyPages.includes(pathname)) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 

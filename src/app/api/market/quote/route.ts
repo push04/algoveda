@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const symbol = searchParams.get('symbol') ?? 'RELIANCE';
 
   try {
-    const data = await fetchYahoo(symbol);
+    const data = await fetchYahooV8(symbol);
     if (data) return NextResponse.json(data, {
       headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=15' }
     });
@@ -18,37 +18,54 @@ export async function GET(request: Request) {
   }
 }
 
-async function fetchYahoo(symbol: string) {
-  try {
-    // Append .NS for NSE stocks if not already a Yahoo symbol
-    const yahoSym = symbol.startsWith('^') ? symbol
-      : symbol.includes('.') ? symbol
-      : `${symbol}.NS`;
+export async function fetchYahooV8(symbol: string) {
+  // Append .NS for NSE stocks if not already a Yahoo symbol
+  const yahoSym = symbol.startsWith('^') ? symbol
+    : symbol.includes('.') ? symbol
+    : `${symbol}.NS`;
 
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahoSym}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketVolume,shortName`;
+  try {
+    const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoSym)}?interval=1d&range=5d&includePrePost=false`;
 
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AlgoVeda/1.0)' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://finance.yahoo.com/',
+        'Origin': 'https://finance.yahoo.com',
+        'Cache-Control': 'no-cache',
+      },
       next: { revalidate: 30 },
     });
 
     if (!res.ok) return null;
     const json = await res.json();
-    const q = json.quoteResponse?.result?.[0];
-    if (!q || !q.regularMarketPrice) return null;
+    const result = json.chart?.result?.[0];
+    if (!result) return null;
+
+    const meta = result.meta;
+    const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? 0;
+    const price = meta.regularMarketPrice ?? 0;
+    if (!price) return null;
+
+    const change = price - prevClose;
+    const changeP = prevClose > 0 ? (change / prevClose) * 100 : 0;
 
     return {
       symbol: symbol.toUpperCase(),
-      name: q.shortName ?? symbol,
-      price: q.regularMarketPrice ?? 0,
-      change: q.regularMarketChange ?? 0,
-      changeP: q.regularMarketChangePercent ?? 0,
-      open: q.regularMarketOpen ?? 0,
-      high: q.regularMarketDayHigh ?? 0,
-      low: q.regularMarketDayLow ?? 0,
-      volume: q.regularMarketVolume ?? 0,
+      name: meta.longName ?? meta.shortName ?? symbol,
+      price,
+      change,
+      changeP,
+      open: meta.regularMarketOpen ?? 0,
+      high: meta.regularMarketDayHigh ?? 0,
+      low: meta.regularMarketDayLow ?? 0,
+      volume: meta.regularMarketVolume ?? 0,
+      previousClose: prevClose,
       timestamp: new Date().toISOString(),
-      source: 'yahoo',
+      source: 'yahoo-v8',
     };
   } catch {
     return null;

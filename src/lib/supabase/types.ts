@@ -7,9 +7,11 @@ export interface Profile {
   phone?: string;
   avatar_url?: string;
   role: 'user' | 'admin' | 'analyst';
+  is_admin: boolean;
   is_active: boolean;
   timezone: string;
   onboarding_done: boolean;
+  plan: string;
   created_at: string;
   updated_at: string;
 }
@@ -22,11 +24,14 @@ export interface SubscriptionPlan {
   price_monthly: number;
   price_yearly?: number;
   features: Json;
+  limits: Json;
   max_backtests: number;
   max_watchlists: number;
   email_frequency_min: number;
   is_active: boolean;
+  sort_order: number;
   created_at: string;
+  updated_at: string;
 }
 
 export interface Subscription {
@@ -34,10 +39,14 @@ export interface Subscription {
   user_id: string;
   plan_id: string;
   status: 'pending' | 'active' | 'paused' | 'cancelled' | 'expired' | 'halted';
-  current_period_start?: string;
-  current_period_end?: string;
+  billing_cycle: 'monthly' | 'yearly';
+  starts_at?: string;
+  ends_at?: string;
   cancel_at_period_end: boolean;
   backtests_used_this_month: number;
+  razorpay_order_id?: string;
+  razorpay_payment_id?: string;
+  razorpay_subscription_id?: string;
   created_at: string;
   plan?: SubscriptionPlan;
 }
@@ -52,6 +61,9 @@ export interface BacktestJob {
   end_date: string;
   interval: string;
   initial_capital: number;
+  strategy_type?: string;
+  strategy_params?: Json;
+  parameters?: Json;
   status: 'queued' | 'running' | 'completed' | 'failed';
   progress: number;
   queued_at: string;
@@ -91,6 +103,20 @@ export interface BacktestResult {
   job?: BacktestJob;
 }
 
+/** Paper trading portfolio (DB table: portfolios) */
+export interface Portfolio {
+  id: string;
+  user_id: string;
+  name: string;
+  type: 'paper' | 'live';
+  currency: string;
+  initial_capital: number;
+  current_cash: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PaperOrder {
   id: string;
   user_id: string;
@@ -122,6 +148,27 @@ export interface PortfolioHolding {
   pnl_pct?: number;
 }
 
+export interface Watchlist {
+  id: string;
+  user_id: string;
+  name: string;
+  is_default: boolean;
+  symbols?: Json;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface WatchlistItem {
+  id: string;
+  watchlist_id: string;
+  symbol: string;
+  exchange: string;
+  added_at: string;
+  notes?: string;
+  alert_above?: number;
+  alert_below?: number;
+}
+
 export interface AlertConfig {
   id: string;
   user_id: string;
@@ -137,6 +184,7 @@ export interface AlertConfig {
 
 export interface EmailPreferences {
   id: string;
+  user_id?: string;
   digest_enabled: boolean;
   digest_frequency: '1h' | '2h' | '3h' | '4h' | '6h' | '12h' | '24h';
   include_watchlist: boolean;
@@ -161,5 +209,26 @@ export interface ResearchReport {
   model_used: string;
   tokens_used?: number;
   is_public: boolean;
+  created_at: string;
+}
+
+export interface Strategy {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  type?: string;
+  parameters: Json;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedScreen {
+  id: string;
+  user_id: string;
+  name: string;
+  filter_config: Json;
+  alert_on_match: boolean;
   created_at: string;
 }

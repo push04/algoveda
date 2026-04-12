@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import Groq from 'groq-sdk';
+import { fetchYahooV8 } from '@/app/api/market/quote/route';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -11,18 +12,14 @@ export async function GET(request: Request) {
   const symbol = searchParams.get('symbol') ?? 'RELIANCE';
 
   try {
-    // Fetch real price data first
-    const priceRes = await fetch(
-      `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://algoveda.vercel.app'}/api/market/quote?symbol=${symbol}`,
-      { next: { revalidate: 60 } }
-    );
-    const priceData = priceRes.ok ? await priceRes.json() : null;
+    // Fetch live price directly (no self-referential HTTP call)
+    const priceData = await fetchYahooV8(symbol);
 
     const priceContext = priceData && priceData.price > 0
-      ? `Current Price: ₹${priceData.price.toFixed(2)}, Change: ${priceData.changeP > 0 ? '+' : ''}${priceData.changeP?.toFixed(2)}%, Volume: ${priceData.volume?.toLocaleString()}`
+      ? `Current Price: ₹${priceData.price.toFixed(2)}, Change: ${priceData.changeP > 0 ? '+' : ''}${priceData.changeP?.toFixed(2)}%, Volume: ${priceData.volume?.toLocaleString('en-IN')}`
       : 'Live price unavailable — base analysis on fundamentals only.';
 
-    const prompt = `You are AlgoVeda's institutional-grade AI research analyst covering Indian equity markets (NSE/BSE). 
+    const prompt = `You are AlgoVeda's institutional-grade AI research analyst covering Indian equity markets (NSE/BSE).
 Generate a concise but thorough equity research report for ${symbol}.
 
 Market snapshot: ${priceContext}
@@ -55,7 +52,7 @@ Be precise, data-driven, and use Indian market context. Do not hallucinate speci
     });
 
     const raw = completion.choices[0]?.message?.content ?? '{}';
-    let report: Record<string, any>;
+    let report: Record<string, unknown>;
     try {
       report = JSON.parse(raw);
     } catch {
@@ -69,8 +66,9 @@ Be precise, data-driven, and use Indian market context. Do not hallucinate speci
       generatedAt: new Date().toISOString(),
       model: 'llama3-70b-8192',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'AI research failed';
     console.error('Groq research error:', err);
-    return NextResponse.json({ error: err.message ?? 'AI research failed' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
