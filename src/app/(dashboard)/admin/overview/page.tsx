@@ -224,6 +224,7 @@ export default function AdminOverviewPage() {
             <h3 className="font-ui font-bold text-sm text-stone-700 mb-4">Admin Quick Actions</h3>
             <div className="space-y-2">
               {[
+                { label: 'Manage Users', icon: 'group', href: '/admin/users', desc: 'View all users, toggle admin roles' },
                 { label: 'Manage Subscription Plans', icon: 'workspace_premium', href: '/admin/plans', desc: 'Create, edit, delete plans' },
                 { label: 'Live API Tester', icon: 'api', href: '/admin/api-tester', desc: 'Test all endpoints live' },
                 { label: 'Market Indices', icon: 'monitoring', href: '/api/market/indices', desc: 'View live API response', external: true },
