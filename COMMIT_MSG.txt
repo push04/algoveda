@@ -1,8 +1,9 @@
-feat: Add Resend email API and Starter plan
+fix: Fix build errors, homepage ticker, and logged-in user greeting
 
-- Add Resend API integration for email sending (/api/email/send)
-- Create email_logs table for tracking sent emails
-- Add Rs 2 Starter learning plan to database
-- All settings data loads from Supabase
+- Add SupabaseClient type import to fix build error in API routes
+- Make TickerBar fixed at top, prevent gap on scroll
+- Add padding to account for fixed ticker
+- Show "Hi, {name}" on homepage for logged-in users
+- Fix nav to be full-width instead of fixed width
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

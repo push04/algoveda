@@ -1,10 +1,17 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export async function createClient() {
+type ExtendedSupabaseClient = ReturnType<typeof createServerClient> & {
+  auth: {
+    getUser: () => Promise<{ data: { user: any }; error: any }>;
+    getSession: () => Promise<{ data: { session: any }; error: any }>;
+  };
+};
+
+export async function createClient(): Promise<ExtendedSupabaseClient> {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -23,5 +30,7 @@ export async function createClient() {
         },
       },
     }
-  );
+  ) as ExtendedSupabaseClient;
+
+  return supabase;
 }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/client';
 
 /* ─────────────────────────────────────────────────────────
    Types
@@ -22,6 +23,11 @@ interface Plan {
 }
 
 interface SiteStats { backtests: number; users: number; uptime: number; }
+
+interface UserState {
+  user: any;
+  profile: { full_name: string } | null;
+}
 
 /* ─────────────────────────────────────────────────────────
    Hooks
@@ -114,14 +120,14 @@ function TickerBar() {
   }, []);
 
   return (
-    <div className="bg-[#0F1A14] text-white overflow-hidden py-2 border-b border-white/10 relative z-40 h-8">
+    <div className="bg-[#0F1A14] text-white overflow-hidden py-2 border-b border-white/10 fixed top-0 left-0 right-0 z-[100] h-8">
       <div className="flex animate-marquee whitespace-nowrap">
         {[...tickers, ...tickers].map((t, i) => (
           <span key={i} className="inline-flex items-center gap-2 mx-6 font-data text-[11px]">
             <span className="text-stone-400 uppercase tracking-widest text-[10px]">{t.sym}</span>
             <span className="font-bold">{t.val}</span>
             <span className={t.up ? 'text-emerald-400' : 'text-red-400'}>{t.chg}</span>
-            <span className="text-white/20 mx-1">·</span>
+            <span className="text-white/20 mx-1">|</span>
           </span>
         ))}
       </div>
@@ -351,12 +357,26 @@ function MarketIntelSection() {
    MAIN LANDING PAGE
 ───────────────────────────────────────────────────────── */
 export default function LandingPage() {
+  const supabase = createClient();
   const [email, setEmail]       = useState('');
   const [scrolled, setScrolled] = useState(false);
   const [heroIn, setHeroIn]     = useState(false);
   const [plans, setPlans]       = useState<Plan[]>([]);
   const [stats, setStats]       = useState<SiteStats | null>(null);
   const [toast, setToast]       = useState<{ ok: boolean; msg: string } | null>(null);
+  const [user, setUser]         = useState<{ user: any; profile: { full_name: string } | null } | null>(null);
+
+  // Check auth on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (u) {
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', u.id).single();
+        setUser({ user: u, profile });
+      }
+    };
+    checkAuth();
+  }, []);
 
   const statsRef  = useInView(0.2);
   const backtestC = useCountUp(stats?.backtests ?? 0, 2000, statsRef.inView && (stats?.backtests ?? 0) > 0);
@@ -413,7 +433,7 @@ export default function LandingPage() {
   const displayPlans = plans.length ? plans : FALLBACK_PLANS;
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface font-body selection:bg-secondary-container selection:text-on-secondary-fixed overflow-x-hidden">
+    <div className="min-h-screen bg-surface text-on-surface font-body selection:bg-secondary-container selection:text-on-secondary-fixed overflow-x-hidden pt-8">
 
       {/* Toast */}
       {toast && (
@@ -429,7 +449,7 @@ export default function LandingPage() {
       <TickerBar />
 
       {/* ── NAV ──────────────────────────────────────── */}
-      <nav className={`fixed top-8 w-full h-16 flex justify-between items-center px-8 z-50 transition-all duration-300 ${scrolled ? 'glass-panel shadow-sm' : 'bg-transparent'}`}>
+      <nav className={`fixed top-8 left-0 right-0 h-16 flex justify-between items-center px-8 z-50 transition-all duration-300 ${scrolled ? 'glass-panel shadow-sm' : 'bg-transparent'}`}>
         <div className="flex items-center gap-4">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/20">
             <span className="material-symbols-outlined text-white text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>analytics</span>
@@ -442,13 +462,21 @@ export default function LandingPage() {
           </div>
         </div>
         <div className="flex items-center gap-6">
-          <button className="hidden md:block font-ui text-xs font-bold uppercase tracking-widest text-primary border border-primary/20 px-4 py-2 hover:bg-primary hover:text-white transition-all duration-200">
-            Upgrade to PRO
-          </button>
-          <Link href="/auth/login"  className="font-ui text-sm text-stone-600 hover:text-primary transition-colors">Sign In</Link>
-          <Link href="/auth/signup" className="bg-primary text-white font-ui font-bold px-5 py-2.5 text-sm hover:bg-[#1A4D2E] hover:translate-y-[-1px] transition-all shadow-lg shadow-primary/20">
-            Start Free
-          </Link>
+          {user?.user ? (
+            <Link href="/dashboard" className="font-ui text-sm font-bold text-primary">
+              Hi, {user.profile?.full_name?.split(' ')[0] || 'User'}
+            </Link>
+          ) : (
+            <>
+              <button className="hidden md:block font-ui text-xs font-bold uppercase tracking-widest text-primary border border-primary/20 px-4 py-2 hover:bg-primary hover:text-white transition-all duration-200">
+                Upgrade to PRO
+              </button>
+              <Link href="/auth/login" className="font-ui text-sm text-stone-600 hover:text-primary transition-colors">Sign In</Link>
+              <Link href="/auth/signup" className="bg-primary text-white font-ui font-bold px-5 py-2.5 text-sm hover:bg-[#1A4D2E] hover:translate-y-[-1px] transition-all shadow-lg shadow-primary/20">
+                Start Free
+              </Link>
+            </>
+          )}
         </div>
       </nav>
 
