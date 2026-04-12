@@ -100,6 +100,9 @@ const config: Config = {
         "pulse-slow": "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         shimmer: "shimmer 1.5s infinite",
         "fade-in": "fadeIn 0.2s ease-out",
+        marquee: "marquee 28s linear infinite",
+        float: "float 4s ease-in-out infinite",
+        "count": "countUp 0.4s ease-out forwards",
       },
       keyframes: {
         shimmer: {
@@ -109,6 +112,18 @@ const config: Config = {
         fadeIn: {
           "0%": { opacity: "0", transform: "scale(0.95)" },
           "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
+        float: {
+          "0%, 100%": { transform: "rotate(-4deg) translateY(0px) translateX(10px)" },
+          "50%": { transform: "rotate(-4deg) translateY(-8px) translateX(10px)" },
+        },
+        countUp: {
+          "from": { opacity: "0", transform: "translateY(10px)" },
+          "to": { opacity: "1", transform: "translateY(0)" },
         },
       },
     },

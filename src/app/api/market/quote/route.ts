@@ -1,121 +1,56 @@
 import { NextResponse } from 'next/server';
 
-// Real market data from NSE India (using their public endpoints)
-// Fallback to Yahoo Finance if NSE fails
+export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const symbol = searchParams.get('symbol') || 'NIFTY 50';
-  
+  const symbol = searchParams.get('symbol') ?? 'RELIANCE';
+
   try {
-    // Try NSE India API first
-    const nseData = await fetchNSEData(symbol);
-    if (nseData) {
-      return NextResponse.json(nseData);
-    }
-    
-    // Fallback to Yahoo Finance
-    const yahooData = await fetchYahooData(symbol);
-    if (yahooData) {
-      return NextResponse.json(yahooData);
-    }
-    
+    const data = await fetchYahoo(symbol);
+    if (data) return NextResponse.json(data, {
+      headers: { 'Cache-Control': 's-maxage=30, stale-while-revalidate=15' }
+    });
     return NextResponse.json({ error: 'No data available' }, { status: 503 });
-  } catch (error) {
-    console.error('Market data error:', error);
-    return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 });
+  } catch (err) {
+    console.error('Quote error:', err);
+    return NextResponse.json({ error: 'Failed to fetch quote' }, { status: 500 });
   }
 }
 
-async function fetchNSEData(symbol: string): Promise<any> {
+async function fetchYahoo(symbol: string) {
   try {
-    const cleanSymbol = symbol.replace('.NS', '').replace('-eq', '').replace('.NS', '');
-    
-    // NSE Quote API (official)
-    const response = await fetch(
-      `https://www.nseindia.com/api/quoteEquity?symbol=${cleanSymbol}&section=info`,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': 'https://www.nseindia.com/',
-          'Origin': 'https://www.nseindia.com',
-        },
-        next: { revalidate: 30 }
-      }
-    );
-    
-    if (!response.ok) {
-      console.log('NSE response not ok:', response.status);
-      return null;
-    }
-    
-    const data = await response.json();
-    
-    if (!data || !data.priceInfo) {
-      console.log('NSE data missing priceInfo');
-      return null;
-    }
-    
-    return {
-      symbol: data.metadata?.symbol || cleanSymbol,
-      price: parseFloat(data.priceInfo?.lastPrice || 0),
-      change: parseFloat(data.priceInfo?.change || 0),
-      changeP: parseFloat(data.priceInfo?.pChange || 0),
-      open: parseFloat(data.priceInfo?.open || 0),
-      high: parseFloat(data.priceInfo?.dayHigh || 0),
-      low: parseFloat(data.priceInfo?.dayLow || 0),
-      volume: parseInt(data.metadata?.totalTradedVolume || 0),
-      timestamp: new Date().toISOString(),
-      source: 'nse',
-    };
-  } catch (error) {
-    console.log('NSE fetch error:', error);
-    return null;
-  }
-}
-
-async function fetchYahooData(symbol: string): Promise<any> {
-  try {
-    const cleanSymbol = symbol.includes('NSE') || symbol.includes('NS') 
-      ? symbol 
+    // Append .NS for NSE stocks if not already a Yahoo symbol
+    const yahoSym = symbol.startsWith('^') ? symbol
+      : symbol.includes('.') ? symbol
       : `${symbol}.NS`;
-    
-    // Yahoo Finance API via rapidapi or direct
-    const response = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${cleanSymbol}?interval=1d&range=1d`,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-        },
-        next: { revalidate: 30 }
-      }
-    );
-    
-    if (!response.ok) return null;
-    
-    const data = await response.json();
-    const result = data.chart?.result?.[0];
-    
-    if (!result) return null;
-    
-    const meta = result.meta;
-    const quote = result.indicators?.quote?.[0];
-    
+
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${yahoSym}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow,regularMarketVolume,shortName`;
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AlgoVeda/1.0)' },
+      next: { revalidate: 30 },
+    });
+
+    if (!res.ok) return null;
+    const json = await res.json();
+    const q = json.quoteResponse?.result?.[0];
+    if (!q || !q.regularMarketPrice) return null;
+
     return {
-      symbol: meta.symbol,
-      price: meta.regularMarketPrice || 0,
-      change: meta.regularMarketChange || 0,
-      changeP: meta.regularMarketChangePercent || 0,
-      open: meta.chartPreviousClose || meta.regularMarketOpen || 0,
-      high: meta.regularMarketDayHigh || 0,
-      low: meta.regularMarketDayLow || 0,
-      volume: meta.regularMarketVolume || 0,
+      symbol: symbol.toUpperCase(),
+      name: q.shortName ?? symbol,
+      price: q.regularMarketPrice ?? 0,
+      change: q.regularMarketChange ?? 0,
+      changeP: q.regularMarketChangePercent ?? 0,
+      open: q.regularMarketOpen ?? 0,
+      high: q.regularMarketDayHigh ?? 0,
+      low: q.regularMarketDayLow ?? 0,
+      volume: q.regularMarketVolume ?? 0,
       timestamp: new Date().toISOString(),
       source: 'yahoo',
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
