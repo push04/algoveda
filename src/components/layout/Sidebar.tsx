@@ -29,6 +29,7 @@ const ADMIN_ITEMS = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [user, setUser] = useState<{ name: string; plan: string; isAdmin: boolean } | null>(null);
+  const [portfolioCash, setPortfolioCash] = useState<number | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
@@ -45,6 +46,19 @@ export default function Sidebar() {
         plan: profile?.plan ?? 'explorer',
         isAdmin: profile?.is_admin ?? false,
       });
+
+      // Fetch real portfolio cash (null means no portfolio / not subscribed)
+      try {
+        const res = await fetch('/api/portfolio');
+        if (res.ok) {
+          const data = await res.json();
+          setPortfolioCash(data.portfolio?.current_cash ?? null);
+        } else {
+          setPortfolioCash(null);
+        }
+      } catch {
+        setPortfolioCash(null);
+      }
     };
     load();
   }, []);

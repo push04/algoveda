@@ -40,6 +40,7 @@ const PLAN_COLORS: Record<string, string> = {
 export default function PricingPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userLoading, setUserLoading] = useState(true);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [paying, setPaying] = useState<string | null>(null);
   const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
@@ -58,7 +59,7 @@ export default function PricingPage() {
     // Load plans
     fetch('/api/admin/plans').then(r => r.json()).then(data => {
       const sorted = (data.plans ?? [])
-        .filter((p: Plan) => p.slug !== 'institution') // remove institutional plan
+        .filter((p: Plan) => p.slug !== 'institution')
         .sort((a: Plan, b: Plan) => {
           if (a.slug === 'starter') return -1;
           if (b.slug === 'starter') return 1;
@@ -68,7 +69,17 @@ export default function PricingPage() {
       setLoading(false);
     });
 
-    // Use auth state change for reliable session detection
+    // Resolve current session immediately — avoids race condition where user is null on first render
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const u = session.user;
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', u.id).single();
+        setUser({ id: u.id, email: u.email, name: profile?.full_name });
+      }
+      setUserLoading(false);
+    });
+
+    // Also watch for auth changes (login/logout while page is open)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const u = session.user;
@@ -77,6 +88,7 @@ export default function PricingPage() {
       } else {
         setUser(null);
       }
+      setUserLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -88,6 +100,8 @@ export default function PricingPage() {
   };
 
   const handlePurchase = async (plan: Plan) => {
+    // Wait for session check to complete before deciding to redirect
+    if (userLoading) return;
     if (!user) {
       window.location.href = `/auth/login?redirect=/pricing`;
       return;

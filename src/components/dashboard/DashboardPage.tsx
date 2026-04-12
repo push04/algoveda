@@ -88,6 +88,7 @@ export default function DashboardPage() {
   const [picks, setPicks] = useState<DailyPick[]>([]);
   const [picksLoading, setPicksLoading] = useState(true);
   const [paperBalance, setPaperBalance] = useState<number | null>(null);
+  const [hasSubscription, setHasSubscription] = useState(false);
   const marketOpen = isMarketOpen();
 
   const loadData = useCallback(async () => {
@@ -161,7 +162,11 @@ export default function DashboardPage() {
       const res = await fetch('/api/portfolio');
       if (res.ok) {
         const data = await res.json();
-        if (data.portfolio) {
+        if (data.requiresSubscription) {
+          setHasSubscription(false);
+          setPaperBalance(null);
+        } else if (data.portfolio) {
+          setHasSubscription(true);
           const holdings = data.holdings ?? [];
           const quotes: Record<string, number> = {};
           await Promise.allSettled(holdings.map(async (h: { symbol: string }) => {
@@ -359,9 +364,15 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-body text-stone-500">Paper Balance</span>
-                <span className="text-sm font-data font-bold text-[#00361a]">
-                  {paperBalance !== null ? `₹${paperBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
-                </span>
+                {hasSubscription ? (
+                  <span className="text-sm font-data font-bold text-[#00361a]">
+                    {paperBalance !== null
+                      ? `₹${paperBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                      : '—'}
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-ui text-stone-400 italic">Not activated</span>
+                )}
               </div>
             </div>
             {(!profile?.plan || profile.plan === 'explorer') && (
