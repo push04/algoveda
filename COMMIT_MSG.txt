@@ -1,9 +1,8 @@
-fix: Fix build errors, homepage ticker, and logged-in user greeting
+fix: Resolve all TypeScript build errors
 
-- Add SupabaseClient type import to fix build error in API routes
-- Make TickerBar fixed at top, prevent gap on scroll
-- Add padding to account for fixed ticker
-- Show "Hi, {name}" on homepage for logged-in users
-- Fix nav to be full-width instead of fixed width
+- Fix createClient() to need await and add proper AuthClient type interface
+- Add exchangeCodeForSession and signOut to AuthClient type
+- Fix Window.Razorpay type conflict in pricing page
+- Fix type casting for data.report in ResearchPage
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

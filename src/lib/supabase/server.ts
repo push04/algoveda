@@ -1,17 +1,21 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-type ExtendedSupabaseClient = ReturnType<typeof createServerClient> & {
+// Extended type that includes auth methods
+interface AuthClient {
   auth: {
-    getUser: () => Promise<{ data: { user: any }; error: any }>;
-    getSession: () => Promise<{ data: { session: any }; error: any }>;
+    getUser(): Promise<{ data: { user: { id: string; email: string } | null }; error: Error | null }>;
+    getSession(): Promise<{ data: { session: { access_token: string; user: { id: string } } | null }; error: Error | null }>;
+    exchangeCodeForSession(code: string): Promise<{ error: Error | null }>;
+    signOut(): Promise<{ error: Error | null }>;
   };
-};
+  from(table: string): any;
+}
 
-export async function createClient(): Promise<ExtendedSupabaseClient> {
+export async function createClient() {
   const cookieStore = await cookies();
 
-  const supabase = createServerClient(
+  const client = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -25,12 +29,13 @@ export async function createClient(): Promise<ExtendedSupabaseClient> {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // ignore in Server Components
+            // ignore
           }
         },
       },
     }
-  ) as ExtendedSupabaseClient;
+  );
 
-  return supabase;
+  // Return with type assertion
+  return client as AuthClient;
 }

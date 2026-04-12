@@ -121,7 +121,7 @@ export default function ResearchPage() {
         throw new Error(d.error ?? `HTTP ${res.status}`);
       }
       const data: ApiResponse = await res.json();
-      if ((data.report as Record<string, unknown>)?.error) throw new Error('Report generation failed — try again');
+      if ((data.report as unknown as Record<string, unknown>)?.error) throw new Error('Report generation failed — try again');
       setResult(data);
       setUsageCount(c => c + 1);
     } catch (e: unknown) {

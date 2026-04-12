@@ -17,7 +17,7 @@ interface Plan {
 
 declare global {
   interface Window {
-    Razorpay: new (options: RazorpayOptions) => { open(): void };
+    Razorpay: any;
   }
 }
 
