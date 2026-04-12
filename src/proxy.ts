@@ -35,6 +35,7 @@ export async function proxy(request: NextRequest) {
     '/_next/',
     '/favicon',
   ];
+  
   const isPublic = publicPrefixes.some(p =>
     p.endsWith('/') ? pathname.startsWith(p) : pathname === p
   );
