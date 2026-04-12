@@ -1,18 +1,55 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 interface TopNavProps {
   breadcrumb?: string[];
 }
 
+function getISTTime(): Date {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+}
+
+function isMarketOpen(): boolean {
+  const now = getISTTime();
+  const day = now.getDay();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+  if (day === 0 || day === 6) return false; // Weekend
+  if (hour < 9 || hour >= 15) return false; // Before 9:15 AM or after 3:30 PM
+  if (hour === 9 && minute < 15) return false; // Before 9:15 AM
+  if (hour === 15 && minute > 30) return false; // After 3:30 PM
+  return true;
+}
+
 export default function TopNav({ breadcrumb }: TopNavProps) {
   const [search, setSearch] = useState('');
+  const [marketOpen, setMarketOpen] = useState(false);
+  const [istTime, setIstTime] = useState('');
+
+  useEffect(() => {
+    const update = () => {
+      const now = getISTTime();
+      setIstTime(now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
+      setMarketOpen(isMarketOpen());
+    };
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <header className="fixed top-0 right-0 w-[calc(100%-240px)] h-16 bg-white/65 backdrop-blur-xl flex justify-between items-center px-8 z-40 shadow-sm shadow-emerald-900/5 border-b border-white/85">
       <div className="flex items-center gap-8">
+        {/* Market Status */}
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-ui ${marketOpen ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          <span className={`w-2 h-2 rounded-full ${marketOpen ? 'bg-green-600 animate-pulse' : 'bg-red-500'}`}></span>
+          <span>{marketOpen ? 'MARKET OPEN' : 'MARKET CLOSED'}</span>
+          <span className="text-stone-400">|</span>
+          <span className="text-stone-600">{istTime} IST</span>
+        </div>
+
         {/* Breadcrumb */}
         {breadcrumb && (
           <div className="flex items-center gap-2 text-xs font-ui text-stone-500">

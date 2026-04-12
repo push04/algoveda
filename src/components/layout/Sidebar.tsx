@@ -22,6 +22,7 @@ const ADMIN_ITEMS = [
   { href: '/admin/overview', icon: 'monitor_heart', label: 'System Overview' },
   { href: '/admin/plans', icon: 'workspace_premium', label: 'Manage Plans' },
   { href: '/admin/coupons', icon: 'sell', label: 'Manage Coupons' },
+  { href: '/admin/content', icon: 'auto_awesome', label: 'AI Content' },
   { href: '/admin/api-tester', icon: 'api', label: 'Live API Tester' },
 ];
 

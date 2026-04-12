@@ -1,0 +1,10 @@
+feat: Add market status indicator, AI content generator, fix settings real data
+
+- Add market open/close indicator to TopNav with real IST time
+- Settings page now loads profile and email_preferences from Supabase
+- Add AI Content Generator page (/admin/content) to generate learning modules
+  and quiz questions using Groq AI
+- Add API route /api/admin/content for AI content generation
+- All new content is stored in Supabase with full CRUD
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
