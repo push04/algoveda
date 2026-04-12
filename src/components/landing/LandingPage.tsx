@@ -616,7 +616,7 @@ export default function LandingPage() {
             {[
               { icon:'history_toggle_off', title:'Ultra-Fast Backtesting',    desc:'Execute complex vectorised strategies over 10 years of NSE/BSE tick-data in seconds. Parallel processing for massive speed gains.' },
               { icon:'filter_alt',         title:'Market Screener',           desc:'Sift through 5,000+ instruments using custom fundamental and technical filters. Real-time scanning, zero latency.' },
-              { icon:'auto_awesome',       title:'AI Research Engine',        desc:'Groq-powered LLM generates institutional-grade reports for any Indian stock in under 5 seconds.' },
+              { icon:'auto_awesome',       title:'Research Engine',        desc:'Generates institutional-grade reports for any Indian stock in under 5 seconds.' },
               { icon:'currency_exchange',  title:'Paper Trading',             desc:'Risk-free strategy validation with live market prices. Simulates real brokerage costs and slippage accurately.' },
               { icon:'mail',               title:'Smart Email Digests',       desc:'Automated market updates every 3 hours — Nifty movers, watchlist, AI commentary delivered to your inbox.' },
               { icon:'notifications_active', title:'Real-Time Alerts',        desc:'Price alerts, RSI signals, MA crossovers — get notified instantly the moment your conditions are met.' },

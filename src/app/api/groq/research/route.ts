@@ -113,7 +113,7 @@ Return a JSON object with EXACTLY this structure (no extra fields):
 Be precise, data-driven, and use Indian market context. sentimentScore is 0-100 (0=very bearish, 100=very bullish).`;
 
     const completion = await groq.chat.completions.create({
-      model: 'llama3-70b-8192',
+      model: 'llama-3.1-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
       max_tokens: 2048,
@@ -133,7 +133,7 @@ Be precise, data-driven, and use Indian market context. sentimentScore is 0-100 
       report,
       priceData: priceData ?? null,
       generatedAt: new Date().toISOString(),
-      model: 'llama3-70b-8192',
+      model: 'llama-3.1-70b-versatile',
       planInfo: {
         plan,
         suggestionLimit,

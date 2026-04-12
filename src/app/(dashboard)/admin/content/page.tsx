@@ -131,8 +131,8 @@ export default function AdminContentPage() {
         {toast && <div className={`fixed top-6 right-6 z-50 px-5 py-3 rounded-lg shadow-xl ${toast.ok ? 'bg-green-600' : 'bg-red-600'} text-white font-ui text-sm animate-fadeIn`}>{toast.msg}</div>}
 
         <div className="mb-8">
-          <h1 className="font-headline text-3xl text-primary">AI Content Generator</h1>
-          <p className="text-stone-500">Generate learning modules and quizzes using Groq AI</p>
+          <h1 className="font-headline text-3xl text-primary">Content Generator</h1>
+          <p className="text-stone-500">Generate learning modules and quizzes</p>
         </div>
 
         {/* Generator Controls */}

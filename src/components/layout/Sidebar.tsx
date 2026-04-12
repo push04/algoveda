@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { href: '/paper-trade', icon: 'currency_exchange', label: 'Paper Trade' },
   { href: '/portfolio', icon: 'pie_chart', label: 'Portfolio' },
   { href: '/alerts', icon: 'notifications_active', label: 'Alerts' },
-  { href: '/research', icon: 'auto_awesome', label: 'AI Research' },
+  { href: '/research', icon: 'auto_awesome', label: 'Research' },
   { href: '/settings', icon: 'settings', label: 'Settings' },
 ];
 

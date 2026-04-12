@@ -52,7 +52,7 @@ export default function BacktestPage() {
         <div className="bg-white p-6 rounded-xl shadow-card">
           <span className="material-symbols-outlined text-[24px] text-[#1A4D2E] mb-4 block">auto_awesome</span>
           <h4 className="font-ui font-bold text-[#0F1A14] mb-2">AI Analysis</h4>
-          <p className="text-sm text-stone-500">Groq-powered strategy insights</p>
+          <p className="text-sm text-stone-500">Strategy insights powered by advanced analytics</p>
         </div>
       </div>
     </main>

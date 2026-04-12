@@ -47,26 +47,26 @@ const ENDPOINTS: ApiEndpoint[] = [
   },
   // AI Services
   {
-    name: 'Groq AI Research (RELIANCE)',
+    name: 'Research Engine (RELIANCE)',
     url: '/api/groq/research',
     method: 'GET',
     defaultParams: { symbol: 'RELIANCE' },
-    description: 'Generates institutional equity research via llama3-70b-8192. Takes ~3-5s.',
-    category: 'AI Services',
+    description: 'Generates institutional equity research. Takes ~3-5s.',
+    category: 'Research',
   },
   {
-    name: 'Groq AI Research (INFY)',
+    name: 'Research Engine (INFY)',
     url: '/api/groq/research',
     method: 'GET',
     defaultParams: { symbol: 'INFY' },
-    description: 'Test Groq research with Infosys.',
-    category: 'AI Services',
+    description: 'Test research engine with Infosys.',
+    category: 'Research',
   },
   {
-    name: 'Groq Screener Summary',
+    name: 'Screener Summary',
     url: '/api/groq/screener',
     method: 'POST',
-    description: 'Summarizes screener results using AI.',
+    description: 'Summarizes screener results.',
     defaultBody: JSON.stringify({
       stocks: [
         { symbol: 'TATASTEEL', price: 154, changeP: 1.2, sector: 'Materials' },
@@ -419,7 +419,7 @@ export default function ApiTesterPage() {
               {[
                 { label: 'Yahoo Finance', url: '/api/market/quote?symbol=RELIANCE', color: 'blue' },
                 { label: 'Indices Feed', url: '/api/market/indices', color: 'green' },
-                { label: 'Groq AI', url: '/api/groq/research?symbol=INFY', color: 'purple' },
+                { label: 'Research', url: '/api/groq/research?symbol=INFY', color: 'purple' },
                 { label: 'Platform Stats', url: '/api/stats', color: 'amber' },
               ].map(({ label, url, color }) => (
                 <QuickCheck key={url} label={label} url={url} color={color} />

@@ -29,7 +29,7 @@ interface ApiHealth {
 const HEALTH_CHECKS: Array<{ name: string; url: string }> = [
   { name: 'Yahoo Finance v8', url: '/api/market/quote?symbol=RELIANCE' },
   { name: 'Market Indices', url: '/api/market/indices' },
-  { name: 'Groq AI', url: '/api/groq/research?symbol=TCS' },
+  { name: 'Research Engine', url: '/api/groq/research?symbol=TCS' },
   { name: 'Platform Stats', url: '/api/stats' },
   { name: 'Admin Plans', url: '/api/admin/plans' },
 ];

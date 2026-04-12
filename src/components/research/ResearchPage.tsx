@@ -174,8 +174,8 @@ export default function ResearchPage() {
 
         {/* Header */}
         <div className="animate-fade-in-up">
-          <span className="text-[10px] font-data uppercase tracking-[0.3em] text-[#795900]">Powered by Groq · llama3-70b</span>
-          <h2 className="text-4xl font-headline text-[#00361a] mt-1">AI Research Engine</h2>
+          <span className="text-[10px] font-data uppercase tracking-[0.3em] text-[#795900]">Live Market Data</span>
+          <h2 className="text-4xl font-headline text-[#00361a] mt-1">Research Engine</h2>
           <p className="text-stone-500 font-body text-sm mt-2">Institutional-grade analysis with live market data, sentiment & buy/sell signals.</p>
         </div>
 
@@ -527,9 +527,9 @@ export default function ResearchPage() {
             <div className="w-20 h-20 bg-[#1A4D2E]/5 rounded-2xl flex items-center justify-center mx-auto mb-6">
               <span className="material-symbols-outlined text-[40px] text-[#1A4D2E]">auto_awesome</span>
             </div>
-            <h3 className="font-headline text-2xl text-[#00361a] mb-2">AI Research Engine</h3>
+            <h3 className="font-headline text-2xl text-[#00361a] mb-2">Research Engine</h3>
             <p className="font-body text-stone-500 mb-2 max-w-md mx-auto">
-              Institutional-grade equity analysis with live data, sentiment scores, buy/sell signals, and paper trade integration — powered by Groq AI.
+              Institutional-grade equity analysis with live data, sentiment scores, buy/sell signals, and paper trade integration — .
             </p>
             <p className="text-xs font-ui text-stone-400 mb-8">
               {userPlan === 'explorer' ? '2 free reports · ' : ''}Upgrade for unlimited reports

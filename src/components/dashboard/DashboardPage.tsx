@@ -179,7 +179,7 @@ export default function DashboardPage() {
           </button>
           <Link href="/research" className="flex items-center gap-1.5 px-4 py-2 bg-[#1A4D2E] text-white rounded-lg text-xs font-ui font-bold hover:bg-[#143D24] transition-colors btn-press">
             <span className="material-symbols-outlined text-[14px]">auto_awesome</span>
-            AI Research
+            Research
           </Link>
         </div>
       </section>
@@ -218,7 +218,7 @@ export default function DashboardPage() {
             {[
               { icon: 'history_toggle_off', title: 'Backtest Strategy', desc: 'Validate your ideas on historical data', href: '/backtest/new', color: 'green' },
               { icon: 'currency_exchange', title: 'Paper Trade', desc: '₹1,00,000 virtual capital', href: '/paper-trade', color: 'blue' },
-              { icon: 'auto_awesome', title: 'AI Research', desc: 'Institutional-grade stock analysis', href: '/research', color: 'gold' },
+              { icon: 'auto_awesome', title: 'Research', desc: 'Institutional-grade stock analysis', href: '/research', color: 'gold' },
             ].map(({ icon, title, desc, href, color }, i) => (
               <Link key={href} href={href}
                 className="bento-card card-hover-lift animate-fade-in-up"
@@ -332,11 +332,11 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* AI Research CTA */}
+          {/* Research CTA */}
           <div className="glass-green p-6 rounded-xl animate-fade-in-right" style={{ animationDelay: '120ms' }}>
             <div className="flex items-center gap-2 mb-3">
               <span className="material-symbols-outlined text-[18px] text-[#1A4D2E]" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-              <h3 className="font-ui font-bold text-sm text-[#1A4D2E]">AI Research Engine</h3>
+              <h3 className="font-ui font-bold text-sm text-[#1A4D2E]">Research Engine</h3>
             </div>
             <p className="text-xs text-stone-600 mb-4">Institutional-grade equity analysis with live price data and market intelligence</p>
             <Link href="/research" className="w-full py-2.5 bg-[#1A4D2E] text-white text-xs font-ui font-bold rounded-lg flex items-center justify-center gap-1.5 hover:bg-[#143D24] transition-colors btn-press">

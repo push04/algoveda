@@ -122,7 +122,7 @@ export default function SettingsPage() {
     const checks = [
       { name: 'Yahoo Finance v8 (RELIANCE)', url: '/api/market/quote?symbol=RELIANCE' },
       { name: 'Market Indices (NIFTY 50)', url: '/api/market/indices' },
-      { name: 'Groq AI Research', url: '/api/groq/research?symbol=TCS' },
+      { name: 'Research Engine', url: '/api/groq/research?symbol=TCS' },
       { name: 'Platform Stats', url: '/api/stats' },
       { name: 'Admin Plans', url: '/api/admin/plans' },
     ];
