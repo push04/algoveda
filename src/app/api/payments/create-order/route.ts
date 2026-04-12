@@ -40,10 +40,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cannot create order for free plan' }, { status: 400 });
     }
 
-    // Create Razorpay order (amount in paise - multiply rupees by 100)
+    // price_monthly is stored in paise (e.g. 200 = Rs 2, 149900 = Rs 1499)
+    // Razorpay expects amount in paise — no conversion needed
     const amountInPaise = amount;
+
+    // Ensure minimum amount is 100 paise (Rs 1)
+    const finalAmount = Math.max(amountInPaise, 100);
+
     const order = await razorpay.orders.create({
-      amount: amountInPaise,
+      amount: finalAmount,
       currency: 'INR',
       receipt: `av_${user.id.slice(0, 8)}_${Date.now()}`,
       notes: {

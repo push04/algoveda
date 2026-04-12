@@ -59,6 +59,8 @@ export async function POST(request: Request) {
         billing_cycle: billingCycle,
         starts_at: now.toISOString(),
         ends_at: endsAt.toISOString(),
+        current_period_start: now.toISOString(),
+        current_period_end: endsAt.toISOString(),
       })
       .select()
       .single();
@@ -77,17 +79,28 @@ export async function POST(request: Request) {
       .update({ plan: plan?.name ?? 'standard', updated_at: now.toISOString() })
       .eq('id', user.id);
 
-    // Create paper trading portfolio with Rs 100,000 balance for Starter plan
+    // Create paper trading portfolio with ₹1,00,000 balance for Starter plan subscribers
     const isStarter = plan?.name?.toLowerCase().includes('starter');
     if (isStarter) {
-      await supabase.from('portfolios').insert({
-        user_id: user.id,
-        name: 'My Paper Portfolio',
-        type: 'paper',
-        initial_capital: 100000,
-        current_cash: 100000,
-        is_active: true,
-      });
+      // Only create if doesn't already exist
+      const { data: existingPort } = await supabase
+        .from('portfolios')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('type', 'paper')
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!existingPort) {
+        await supabase.from('portfolios').insert({
+          user_id: user.id,
+          name: 'My Paper Portfolio',
+          type: 'paper',
+          initial_capital: 100000,
+          current_cash: 100000,
+          is_active: true,
+        });
+      }
     }
 
     return NextResponse.json({

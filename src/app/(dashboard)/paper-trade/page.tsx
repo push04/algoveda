@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 
 interface Portfolio {
   id: string;
@@ -66,6 +67,12 @@ export default function PaperTradePage() {
       const res = await fetch('/api/portfolio');
       if (!res.ok) return;
       const data = await res.json();
+      if (data.requiresSubscription) {
+        // Show locked state
+        setPortfolio(null);
+        setLoading(false);
+        return;
+      }
       setPortfolio(data.portfolio);
       setHoldings(data.holdings ?? []);
       setOrders(data.orders ?? []);
@@ -176,6 +183,20 @@ export default function PaperTradePage() {
       {/* Portfolio Summary */}
       {loading ? (
         <div className="glass-panel p-8 rounded-2xl skeleton h-40" />
+      ) : !portfolio ? (
+        <div className="glass-panel p-12 rounded-2xl text-center">
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="material-symbols-outlined text-amber-600 text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>lock</span>
+          </div>
+          <h3 className="font-headline text-2xl text-[#00361a] mb-2">Paper Trading Locked</h3>
+          <p className="font-body text-stone-500 mb-6 text-sm max-w-sm mx-auto">
+            Subscribe to the ₹2 Starter plan to get your ₹1,00,000 virtual trading portfolio and start practicing without risk.
+          </p>
+          <Link href="/pricing" className="inline-block px-8 py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl font-ui font-bold hover:from-amber-600 hover:to-amber-700 transition-all shadow-lg shadow-amber-200">
+            Unlock for ₹2 →
+          </Link>
+          <p className="text-xs text-stone-400 mt-3">One-time payment · Instant access · Secured by Razorpay</p>
+        </div>
       ) : (
         <div className="glass-panel p-8 rounded-2xl relative overflow-hidden animate-fade-in-up" style={{ background: 'linear-gradient(135deg, rgba(232,240,233,0.8) 0%, rgba(253,248,238,0.8) 100%)' }}>
           <div className="absolute top-0 right-0 p-16 opacity-[0.04]">

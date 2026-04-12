@@ -41,7 +41,7 @@ For each stock, provide a one-line AI rationale explaining WHY it passed the scr
 }`;
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.4,
       max_tokens: 512,

@@ -44,13 +44,15 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      if (error.message.includes('Invalid login') || error.message.includes('invalid')) {
+      if (error.message.toLowerCase().includes('email not confirmed') || error.message.toLowerCase().includes('email_not_confirmed')) {
+        setError('Please confirm your email address first. Check your inbox for a confirmation link from AlgoVeda.');
+      } else if (error.message.includes('Invalid login') || error.message.includes('invalid') || error.message.includes('credentials')) {
         setError('Invalid email or password. Please try again.');
       } else if (error.message.includes('Too many requests')) {
         setError('Too many attempts. Please wait a minute and try again.');
@@ -58,9 +60,18 @@ export default function LoginPage() {
         setError(error.message);
       }
       setLoading(false);
-    } else {
-      router.push('/dashboard');
+      return;
     }
+
+    // Check email_confirmed_at
+    if (data?.user && !data.user.email_confirmed_at) {
+      await supabase.auth.signOut();
+      setError('Your email is not confirmed yet. Please check your inbox and click the confirmation link before signing in.');
+      setLoading(false);
+      return;
+    }
+
+    router.push('/dashboard');
   };
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {

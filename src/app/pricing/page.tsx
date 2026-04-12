@@ -21,19 +21,8 @@ declare global {
   }
 }
 
-interface RazorpayOptions {
-  key: string;
-  amount: number;
-  currency: string;
-  name: string;
-  description: string;
-  order_id: string;
-  prefill?: { email?: string; name?: string };
-  theme?: { color?: string };
-  handler(response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }): void;
-}
-
 const PLAN_ICONS: Record<string, string> = {
+  starter: 'school',
   explorer: 'explore',
   researcher: 'science',
   pro: 'star',
@@ -41,6 +30,7 @@ const PLAN_ICONS: Record<string, string> = {
 };
 
 const PLAN_COLORS: Record<string, string> = {
+  starter: 'amber',
   explorer: 'stone',
   researcher: 'blue',
   pro: 'amber',
@@ -52,7 +42,7 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [paying, setPaying] = useState<string | null>(null);
-  const [user, setUser] = useState<{ email?: string; name?: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const supabase = createClient();
 
@@ -61,14 +51,20 @@ export default function PricingPage() {
       // Load plans
       const res = await fetch('/api/admin/plans');
       const data = await res.json();
-      setPlans(data.plans ?? []);
+      // Sort: starter first, then by sort_order
+      const sorted = (data.plans ?? []).sort((a: Plan, b: Plan) => {
+        if (a.slug === 'starter') return -1;
+        if (b.slug === 'starter') return 1;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
+      setPlans(sorted);
       setLoading(false);
 
       // Load user
       const { data: { user: u } } = await supabase.auth.getUser();
       if (u) {
         const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', u.id).single();
-        setUser({ email: u.email, name: profile?.full_name });
+        setUser({ id: u.id, email: u.email, name: profile?.full_name });
       }
 
       // Load Razorpay script
@@ -84,7 +80,7 @@ export default function PricingPage() {
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
-    setTimeout(() => setToast(null), 4000);
+    setTimeout(() => setToast(null), 5000);
   };
 
   const handlePurchase = async (plan: Plan) => {
@@ -93,71 +89,80 @@ export default function PricingPage() {
       return;
     }
 
-    // For Starter ($2) plan - check if already subscribed
-    if (plan.slug === 'starter') {
-      // Check user's subscription status
-      const { data: sub } = await supabase
-        .from('user_subscriptions')
-        .select('status, plan_id')
-        .eq('user_id', user.email ? (await supabase.auth.getUser()).data.user?.id : null)
-        .in('status', ['active', 'trialing'])
-        .single();
-      
-      if (sub?.status) {
-        // Already subscribed - go to Learn page
-        window.location.href = '/learn';
-        return;
-      }
-      
-      // Not subscribed - proceed to checkout
-      setPaying(plan.id);
-    } else if (plan.price_monthly === 0) {
+    if (plan.price_monthly === 0) {
       showToast('You are already on the Explorer (free) plan!');
       return;
-    } else {
-      setPaying(plan.id);
-    }
-    // For $2 Starter plan - treat as instant access (no Razorpay needed since amount is negligible)
-    if (plan.slug === 'starter' && plan.price_monthly === 2) {
-      try {
-        const res = await fetch('/api/payments/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ planId: plan.id, billingCycle: 'once' }),
-        });
-        const order = await res.json();
-        if (!res.ok) throw new Error(order.error ?? 'Failed to process');
-        
-        // Since $2 is very small, auto-grant access instantly
-        showToast('Access granted! Redirecting to Learn page...');
-        window.location.href = '/learn';
-        return;
-      } catch (e: any) {
-        showToast(e.message || 'Failed', false);
-        setPaying(null);
-        return;
-      }
     }
 
+    // Check if already subscribed to this plan
+    const { data: existingSub } = await supabase
+      .from('user_subscriptions')
+      .select('status')
+      .eq('user_id', user.id)
+      .in('status', ['active', 'trialing'])
+      .eq('plan_id', plan.id)
+      .maybeSingle();
+
+    if (existingSub?.status) {
+      showToast(`You already have an active ${plan.name} subscription!`);
+      if (plan.slug === 'starter') {
+        setTimeout(() => { window.location.href = '/learn'; }, 1500);
+      } else {
+        setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
+      }
+      return;
+    }
+
+    setPaying(plan.id);
+
     try {
+      // Create Razorpay order
       const res = await fetch('/api/payments/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId: plan.id, billingCycle }),
       });
       const order = await res.json();
-      if (!res.ok) throw new Error(order.error ?? 'Order creation failed');
+      if (!res.ok) {
+        showToast(order.error ?? 'Failed to create order', false);
+        setPaying(null);
+        return;
+      }
 
-      const options: RazorpayOptions = {
+      // Wait for Razorpay to be ready
+      if (typeof window.Razorpay === 'undefined') {
+        // Try loading again
+        await new Promise<void>((resolve) => {
+          const script = document.createElement('script');
+          script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+          script.onload = () => resolve();
+          script.onerror = () => resolve();
+          document.body.appendChild(script);
+          setTimeout(resolve, 3000);
+        });
+      }
+
+      if (typeof window.Razorpay === 'undefined') {
+        showToast('Payment SDK failed to load. Please disable ad-blockers and try again.', false);
+        setPaying(null);
+        return;
+      }
+
+      const rzp = new window.Razorpay({
         key: order.keyId,
         amount: order.amount,
         currency: order.currency,
         name: 'AlgoVeda',
-        description: `${order.planName} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
+        description: `${order.planName} Plan`,
         order_id: order.orderId,
         prefill: { email: user.email, name: user.name },
         theme: { color: '#1A4D2E' },
-        handler: async (response) => {
+        modal: {
+          ondismiss: () => {
+            setPaying(null);
+          },
+        },
+        handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
           try {
             const verifyRes = await fetch('/api/payments/verify', {
               method: 'POST',
@@ -172,33 +177,36 @@ export default function PricingPage() {
             });
             const result = await verifyRes.json();
             if (result.success) {
-              showToast(`🎉 Welcome to ${plan.name}! Your subscription is active.`);
-              setTimeout(() => window.location.href = '/dashboard', 2500);
+              showToast(`🎉 ${plan.name} plan activated! Redirecting...`);
+              setTimeout(() => {
+                window.location.href = plan.slug === 'starter' ? '/learn' : '/dashboard';
+              }, 2000);
             } else {
               showToast(result.error ?? 'Payment verification failed', false);
             }
-          } catch (e: unknown) {
-            showToast('Payment processing error', false);
+          } catch {
+            showToast('Payment processing error. Please contact support.', false);
           }
           setPaying(null);
         },
-      };
+      });
 
-      if (!window.Razorpay) {
-        showToast('Razorpay SDK not loaded. Please disable ad blockers.', false);
-        return;
-      }
-      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (response: any) => {
+        showToast(`Payment failed: ${response.error?.description ?? 'Unknown error'}`, false);
+        setPaying(null);
+      });
+
       rzp.open();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to initiate payment';
       showToast(msg, false);
+      setPaying(null);
     }
-    setPaying(null);
   };
 
   const getPrice = (plan: Plan) => {
     if (plan.price_monthly === 0) return 'Free';
+    // price_monthly is stored in paise — divide by 100 to get rupees
     const amount = billingCycle === 'yearly' && plan.price_yearly
       ? plan.price_yearly / 12
       : plan.price_monthly;
@@ -214,11 +222,11 @@ export default function PricingPage() {
   };
 
   const colorClass = (slug: string) => ({
-    stone: { border: 'border-stone-200', btn: 'bg-stone-700 hover:bg-stone-800', badge: 'bg-stone-100 text-stone-600', icon: 'text-stone-600 bg-stone-100' },
-    blue: { border: 'border-blue-200', btn: 'bg-blue-700 hover:bg-blue-800', badge: 'bg-blue-100 text-blue-700', icon: 'text-blue-600 bg-blue-100' },
+    stone: { border: 'border-stone-200', btn: 'bg-stone-700 hover:bg-stone-800 text-white', badge: 'bg-stone-100 text-stone-600', icon: 'text-stone-600 bg-stone-100' },
+    blue: { border: 'border-blue-200', btn: 'bg-blue-700 hover:bg-blue-800 text-white', badge: 'bg-blue-100 text-blue-700', icon: 'text-blue-600 bg-blue-100' },
     amber: { border: 'border-amber-300 ring-2 ring-amber-300', btn: 'bg-[#D4A843] hover:bg-[#C8A040] text-[#0F1A14]', badge: 'bg-amber-100 text-amber-700', icon: 'text-amber-600 bg-amber-100' },
-    green: { border: 'border-[#1A4D2E]/30', btn: 'bg-[#1A4D2E] hover:bg-[#143D24]', badge: 'bg-emerald-100 text-emerald-700', icon: 'text-[#1A4D2E] bg-emerald-100' },
-  }[PLAN_COLORS[slug] ?? 'stone'] ?? { border: 'border-stone-200', btn: 'bg-stone-700 hover:bg-stone-800', badge: 'bg-stone-100 text-stone-600', icon: 'text-stone-600 bg-stone-100' });
+    green: { border: 'border-[#1A4D2E]/30', btn: 'bg-[#1A4D2E] hover:bg-[#143D24] text-white', badge: 'bg-emerald-100 text-emerald-700', icon: 'text-[#1A4D2E] bg-emerald-100' },
+  }[PLAN_COLORS[slug] ?? 'stone'] ?? { border: 'border-stone-200', btn: 'bg-stone-700 hover:bg-stone-800 text-white', badge: 'bg-stone-100 text-stone-600', icon: 'text-stone-600 bg-stone-100' });
 
   return (
     <div className="min-h-screen mesh-gradient">
@@ -265,7 +273,7 @@ export default function PricingPage() {
             <span className="text-gradient-gold">Retail Price.</span>
           </h1>
           <p className="text-lg text-stone-600 font-body max-w-xl mx-auto">
-            Every plan includes real-time market data, AI research, and paper trading. No credit card required for Explorer.
+            Start with our ₹2 Starter plan — includes full stock market education &amp; paper trading. No hidden fees.
           </p>
         </div>
 
@@ -294,18 +302,25 @@ export default function PricingPage() {
             {[1,2,3,4].map(i => <div key={i} className="bg-white rounded-2xl h-[500px] skeleton" />)}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger-children">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 stagger-children">
             {plans.filter(p => p.is_active).map((plan) => {
               const cc = colorClass(plan.slug);
               const savings = getSavings(plan);
-              const isPopular = plan.slug === 'pro';
+              const isPopular = plan.slug === 'starter';
+              const isPro = plan.slug === 'pro';
               return (
-                <div key={plan.id} className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative card-hover-lift ${cc.border}`}>
+                <div key={plan.id} className={`bg-white rounded-2xl border-2 p-6 flex flex-col relative card-hover-lift ${cc.border} ${plan.slug === 'starter' ? 'lg:col-span-2' : ''}`}>
                   {isPopular && (
-                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#D4A843] text-[#0F1A14] text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#D4A843] text-[#0F1A14] text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide whitespace-nowrap">
+                      ⭐ Start Here
+                    </div>
+                  )}
+                  {isPro && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-[#1A4D2E] text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wide whitespace-nowrap">
                       Most Popular
                     </div>
                   )}
+
                   {/* Icon */}
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${cc.icon}`}>
                     <span className="material-symbols-outlined text-[24px]" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -320,13 +335,21 @@ export default function PricingPage() {
                   <div className="mb-4">
                     <div className="flex items-baseline gap-1">
                       <span className="text-3xl font-data font-bold text-stone-800">{getPrice(plan)}</span>
-                      {plan.price_monthly > 0 && <span className="text-stone-400 text-sm font-body">/mo</span>}
+                      {plan.price_monthly > 0 && plan.slug !== 'starter' && (
+                        <span className="text-stone-400 text-sm font-body">/mo</span>
+                      )}
+                      {plan.slug === 'starter' && (
+                        <span className="text-stone-400 text-sm font-body">one-time</span>
+                      )}
                     </div>
                     {billingCycle === 'yearly' && savings && (
                       <span className="text-xs font-ui text-emerald-600 font-bold">{savings} · Billed annually</span>
                     )}
-                    {billingCycle === 'monthly' && plan.price_monthly === 0 && (
+                    {plan.price_monthly === 0 && (
                       <span className="text-xs font-ui text-stone-400">No credit card required</span>
+                    )}
+                    {plan.slug === 'starter' && (
+                      <p className="text-xs text-amber-700 font-ui font-bold mt-1">✓ Razorpay secured payment</p>
                     )}
                   </div>
 
@@ -344,12 +367,14 @@ export default function PricingPage() {
                   <button
                     onClick={() => handlePurchase(plan)}
                     disabled={paying === plan.id}
-                    className={`w-full py-3 text-sm font-ui font-bold rounded-xl text-white transition-all btn-press disabled:opacity-50 flex items-center justify-center gap-2 ${cc.btn}`}
+                    className={`w-full py-3 text-sm font-ui font-bold rounded-xl transition-all btn-press disabled:opacity-50 flex items-center justify-center gap-2 ${cc.btn}`}
                   >
                     {paying === plan.id ? (
-                      <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Processing...</>
+                      <><span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> Processing...</>
                     ) : plan.price_monthly === 0 ? (
                       user ? 'Current Plan' : 'Get Started Free'
+                    ) : plan.slug === 'starter' ? (
+                      <><span className="material-symbols-outlined text-[16px]">lock_open</span> Unlock for ₹2</>
                     ) : (
                       <><span className="material-symbols-outlined text-[16px]">payments</span> Subscribe Now</>
                     )}
@@ -360,7 +385,7 @@ export default function PricingPage() {
           </div>
         )}
 
-        {/* FAQ / Trust */}
+        {/* Trust Section */}
         <div className="mt-16 text-center">
           <div className="gradient-divider mb-8" />
           <div className="grid grid-cols-3 gap-8 text-sm">

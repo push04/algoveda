@@ -29,6 +29,17 @@ interface UserProfile {
   is_admin?: boolean;
 }
 
+interface DailyPick {
+  id: string;
+  symbol: string;
+  company_name: string;
+  recommendation: string;
+  target_price: number;
+  stop_loss: number;
+  rationale: string;
+  pick_date: string;
+}
+
 // Reliable fallback data (shows when API is unavailable)
 const FALLBACK_INDICES: MarketIndex[] = [
   { name: 'NIFTY 50', value: 24050.60, change: 182.45, changeP: 0.77 },
@@ -74,6 +85,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dataSource, setDataSource] = useState<'live' | 'fallback'>('fallback');
   const [lastUpdated, setLastUpdated] = useState<string>('');
+  const [picks, setPicks] = useState<DailyPick[]>([]);
+  const [picksLoading, setPicksLoading] = useState(true);
+  const [paperBalance, setPaperBalance] = useState<number | null>(null);
   const marketOpen = isMarketOpen();
 
   const loadData = useCallback(async () => {
@@ -130,11 +144,47 @@ export default function DashboardPage() {
     setLoading(false);
   }, []);
 
+  const loadPicks = useCallback(async () => {
+    setPicksLoading(true);
+    try {
+      const res = await fetch('/api/picks');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.picks && data.picks.length > 0) setPicks(data.picks);
+      }
+    } catch { /* ignore */ }
+    setPicksLoading(false);
+  }, []);
+
+  const loadPaperBalance = useCallback(async () => {
+    try {
+      const res = await fetch('/api/portfolio');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.portfolio) {
+          const holdings = data.holdings ?? [];
+          const quotes: Record<string, number> = {};
+          await Promise.allSettled(holdings.map(async (h: { symbol: string }) => {
+            const r = await fetch(`/api/market/quote?symbol=${h.symbol}`);
+            if (r.ok) { const q = await r.json(); if (q.price) quotes[h.symbol] = q.price; }
+          }));
+          const investedVal = holdings.reduce((sum: number, h: { symbol: string; quantity: number; average_price: number; current_price: number }) => {
+            const price = quotes[h.symbol] ?? h.current_price ?? h.average_price;
+            return sum + price * h.quantity;
+          }, 0);
+          setPaperBalance(data.portfolio.current_cash + investedVal);
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     loadData();
+    loadPicks();
+    loadPaperBalance();
     const interval = setInterval(loadData, 60000);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [loadData, loadPicks, loadPaperBalance]);
 
   const fmtPrice = (p: number) => `₹${p.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const fmtNum = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -309,7 +359,9 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-body text-stone-500">Paper Balance</span>
-                <span className="text-sm font-data font-bold text-[#00361a]">₹1,00,000</span>
+                <span className="text-sm font-data font-bold text-[#00361a]">
+                  {paperBalance !== null ? `₹${paperBalance.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '—'}
+                </span>
               </div>
             </div>
             {(!profile?.plan || profile.plan === 'explorer') && (
@@ -346,6 +398,61 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* AI Daily Picks */}
+      <section className="animate-fade-in-up">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <span className="text-[10px] font-data uppercase tracking-[0.3em] text-[#795900]">AI Generated · Updated daily at 8 AM IST</span>
+            <h3 className="font-headline text-2xl text-[#00361a] mt-0.5">Today's AI Picks</h3>
+          </div>
+          <button onClick={loadPicks} disabled={picksLoading} className="flex items-center gap-1.5 px-3 py-2 border border-stone-200 rounded-lg text-xs font-ui text-stone-500 hover:bg-stone-50 transition-colors">
+            <span className={`material-symbols-outlined text-[14px] ${picksLoading ? 'animate-spin' : ''}`}>refresh</span>
+            {picksLoading ? 'Loading...' : 'Refresh Picks'}
+          </button>
+        </div>
+        {picksLoading ? (
+          <div className="grid grid-cols-3 gap-5">
+            {[1,2,3].map(i => <div key={i} className="bg-white rounded-xl h-40 skeleton" />)}
+          </div>
+        ) : picks.length === 0 ? (
+          <div className="glass-panel p-8 rounded-xl text-center">
+            <span className="material-symbols-outlined text-[40px] text-stone-300 mb-2 block">auto_awesome</span>
+            <p className="text-stone-500 text-sm">AI picks not available yet. Check back at 8 AM IST.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-5">
+            {picks.slice(0, 3).map((pick, i) => (
+              <div key={pick.id} className="bg-white rounded-xl shadow-card border border-stone-100 p-5 card-hover-lift animate-fade-in-up" style={{ animationDelay: `${i * 80}ms` }}>
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="font-ui font-bold text-stone-800 text-sm">{pick.symbol}</p>
+                    <p className="text-[10px] text-stone-400 font-body">{pick.company_name}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${pick.recommendation === 'BUY' ? 'bg-emerald-100 text-emerald-700' : pick.recommendation === 'SELL' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {pick.recommendation}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="bg-stone-50 rounded-lg p-2">
+                    <p className="text-[9px] font-data uppercase text-stone-400 mb-0.5">Target</p>
+                    <p className="text-sm font-data font-bold text-emerald-600">₹{pick.target_price?.toLocaleString('en-IN')}</p>
+                  </div>
+                  <div className="bg-stone-50 rounded-lg p-2">
+                    <p className="text-[9px] font-data uppercase text-stone-400 mb-0.5">Stop Loss</p>
+                    <p className="text-sm font-data font-bold text-red-500">₹{pick.stop_loss?.toLocaleString('en-IN')}</p>
+                  </div>
+                </div>
+                <p className="text-xs font-body text-stone-500 leading-relaxed line-clamp-2">{pick.rationale}</p>
+                <Link href={`/research?symbol=${pick.symbol}`} className="mt-3 text-[10px] font-ui font-bold text-[#1A4D2E] hover:underline flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">auto_awesome</span>
+                  Deep Research →
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Bottom Strip */}
       <div className="gradient-divider" />

@@ -11,7 +11,9 @@ export default function DashboardLayout({
       <Sidebar />
       <div className="ml-[240px] min-h-screen">
         <TopNav />
-        {children}
+        <div className="pt-16">
+          {children}
+        </div>
       </div>
       {/* Subtle grid background */}
       <div className="fixed inset-0 pointer-events-none opacity-[0.025] -z-10 overflow-hidden">

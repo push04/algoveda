@@ -303,50 +303,67 @@ function PricingCard({ plan, onToast }: { plan: Plan; onToast: (ok: boolean, msg
 
 /* ─────────────────────────────────────────────────────────
    AI Picks strip
-───────────────────────────────────────────────────────── */
-const AI_PICKS = [
-  { sym:'HDFCBANK', co:'HDFC Bank Ltd.', tag:'BULLISH', sector:'Banking', cap:'Large Cap',
-    note:'Mean reversion detected on daily TF with strong accumulation at 200 EMA support.' },
-  { sym:'TATASTEEL', co:'Tata Steel Ltd.', tag:'BULLISH', sector:'Commodities', cap:'Cyclical',
-    note:'Volume breakout confirmed. RSI indicates untapped momentum potential.' },
-  { sym:'RELIANCE', co:'Reliance Industries', tag:'NEUTRAL', sector:'Energy', cap:'Bluechip',
-    note:'High volatility expected due to upcoming earnings. Watching consolidation phase.' },
+──────────────────────────────────────────────────────── */
+const DEFAULT_PICKS = [
+  { symbol:'HDFCBANK', company_name:'HDFC Bank', recommendation:'BUY', rationale:'Strong fundamentals, digital growth' },
+  { symbol:'RELIANCE', company_name:'Reliance Industries', recommendation:'BUY', rationale:'Retail business expanding, Jio growth' },
+  { symbol:'INFY', company_name:'Infosys', recommendation:'BUY', rationale:'AI automation deals pipeline strong' },
 ];
 
 function MarketIntelSection() {
   const { ref, inView } = useInView(0.1);
+  const [picks, setPicks] = useState<typeof DEFAULT_PICKS>(DEFAULT_PICKS);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/picks')
+      .then(r => r.json())
+      .then(d => {
+        if (d.picks?.length) {
+          setPicks(d.picks.map((p: any) => ({
+            symbol: p.symbol,
+            company_name: p.company_name,
+            recommendation: p.recommendation,
+            rationale: p.rationale,
+          })));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <section className="py-20 px-8 bg-surface-container-high" ref={ref}>
       <div className="container mx-auto max-w-[1320px] grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
         <div style={{ opacity: inView ? 1 : 0, transform: inView ? 'none' : 'translateX(-24px)', transition: 'all 0.7s ease' }}>
-          <span className="font-ui text-xs font-bold text-secondary tracking-widest uppercase mb-4 block">AI Intelligence</span>
-          <h2 className="font-headline text-4xl text-primary mb-6">Today's <span className="italic">AI Picks</span></h2>
+          <span className="font-ui text-xs font-bold text-secondary tracking-widest uppercase mb-4 block">Daily Intelligence</span>
+          <h2 className="font-headline text-4xl text-primary mb-6">Today's <span className="italic">Stock Picks</span></h2>
           <p className="font-body text-on-surface-variant leading-relaxed mb-8 max-w-md">
-            Our model scans thousands of instruments daily, surfacing the highest-conviction opportunities backed by data — not noise.
+            Our research engine analyzes thousands of instruments daily, surfacing the highest-conviction opportunities backed by data.
           </p>
           <Link href="/auth/signup" className="inline-block bg-primary text-white font-ui font-bold px-8 py-4 hover:bg-[#1A4D2E] hover:translate-y-[-2px] transition-all shadow-lg shadow-primary/15">
-            View Full AI Thesis →
+            View Full Analysis
           </Link>
         </div>
         <div className="space-y-4" style={{ opacity: inView ? 1 : 0, transform: inView ? 'none' : 'translateX(24px)', transition: 'all 0.7s ease 0.2s' }}>
-          {AI_PICKS.map((p, i) => (
-            <div key={i} className="glass-panel p-5 hover:shadow-lg hover:translate-y-[-2px] transition-all duration-200 cursor-pointer">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h4 className="font-ui font-bold text-sm tracking-tight">{p.sym}</h4>
-                  <p className="text-[10px] font-data text-stone-500">{p.co}</p>
+          {loading ? (
+            <div className="text-center py-8 text-stone-400">Loading picks...</div>
+          ) : (
+            picks.slice(0, 3).map((p, i) => (
+              <div key={i} className="glass-panel p-5 hover:shadow-lg hover:translate-y-[-2px] transition-all duration-200 cursor-pointer">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h4 className="font-ui font-bold text-sm tracking-tight">{p.symbol}</h4>
+                    <p className="text-[10px] font-data text-stone-500">{p.company_name}</p>
+                  </div>
+                  <span className={`text-[9px] px-2 py-0.5 rounded font-bold ${p.recommendation === 'BUY' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'}`}>
+                    {p.recommendation}
+                  </span>
                 </div>
-                <span className={`text-[9px] px-2 py-0.5 rounded font-bold ${p.tag === 'BULLISH' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-600'}`}>
-                  {p.tag}
-                </span>
+                <p className="text-xs text-stone-600 leading-relaxed italic border-l-2 border-secondary/30 pl-3">{p.rationale}</p>
               </div>
-              <div className="flex gap-2 mb-2">
-                <span className="text-[9px] bg-stone-100 px-2 py-0.5 text-stone-600 font-ui uppercase tracking-tighter">{p.sector}</span>
-                <span className="text-[9px] bg-stone-100 px-2 py-0.5 text-stone-600 font-ui uppercase tracking-tighter">{p.cap}</span>
-              </div>
-              <p className="text-xs text-stone-600 leading-relaxed italic border-l-2 border-secondary/30 pl-3">{p.note}</p>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </section>
