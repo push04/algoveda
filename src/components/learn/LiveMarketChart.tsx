@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, IChartApi, ISeriesApi, Time } from 'lightweight-charts';
+import { createChart, IChartApi, ISeriesApi, Time, CandlestickSeries, LineSeries } from 'lightweight-charts';
 
 const STOCKS = [
   { symbol: 'RELIANCE.NS', name: 'Reliance Industries' },
@@ -118,7 +118,7 @@ export default function LiveMarketChart() {
       },
     });
 
-    const candlestickSeries = chart.addCandlestickSeries({
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10B981',
       downColor: '#EF4444',
       borderVisible: false,
@@ -126,7 +126,7 @@ export default function LiveMarketChart() {
       wickDownColor: '#EF4444'
     });
 
-    const smaSeries = chart.addLineSeries({
+    const smaSeries = chart.addSeries(LineSeries, {
       color: '#3B82F6',
       lineWidth: 2,
     });
