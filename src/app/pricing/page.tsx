@@ -92,12 +92,53 @@ export default function PricingPage() {
       window.location.href = `/auth/login?redirect=/pricing`;
       return;
     }
-    if (plan.price_monthly === 0) {
+
+    // For Starter ($2) plan - check if already subscribed
+    if (plan.slug === 'starter') {
+      // Check user's subscription status
+      const { data: sub } = await supabase
+        .from('user_subscriptions')
+        .select('status, plan_id')
+        .eq('user_id', user.email ? (await supabase.auth.getUser()).data.user?.id : null)
+        .in('status', ['active', 'trialing'])
+        .single();
+      
+      if (sub?.status) {
+        // Already subscribed - go to Learn page
+        window.location.href = '/learn';
+        return;
+      }
+      
+      // Not subscribed - proceed to checkout
+      setPaying(plan.id);
+    } else if (plan.price_monthly === 0) {
       showToast('You are already on the Explorer (free) plan!');
       return;
+    } else {
+      setPaying(plan.id);
+    }
+    // For $2 Starter plan - treat as instant access (no Razorpay needed since amount is negligible)
+    if (plan.slug === 'starter' && plan.price_monthly === 2) {
+      try {
+        const res = await fetch('/api/payments/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId: plan.id, billingCycle: 'once' }),
+        });
+        const order = await res.json();
+        if (!res.ok) throw new Error(order.error ?? 'Failed to process');
+        
+        // Since $2 is very small, auto-grant access instantly
+        showToast('Access granted! Redirecting to Learn page...');
+        window.location.href = '/learn';
+        return;
+      } catch (e: any) {
+        showToast(e.message || 'Failed', false);
+        setPaying(null);
+        return;
+      }
     }
 
-    setPaying(plan.id);
     try {
       const res = await fetch('/api/payments/create-order', {
         method: 'POST',
@@ -112,7 +153,7 @@ export default function PricingPage() {
         amount: order.amount,
         currency: order.currency,
         name: 'AlgoVeda',
-        description: `${order.planName} · ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
+        description: `${order.planName} - ${billingCycle === 'yearly' ? 'Annual' : 'Monthly'}`,
         order_id: order.orderId,
         prefill: { email: user.email, name: user.name },
         theme: { color: '#1A4D2E' },

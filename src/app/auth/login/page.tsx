@@ -2,16 +2,42 @@
 
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+
+const POPULAR_STOCKS = ['RELIANCE', 'HDFCBANK', 'INFY', 'TCS', 'SBIN', 'ICICIBANK', 'TITAN', 'WIPRO', 'BAJFINANCE', 'MARUTI'];
+
+interface StockQuote {
+  symbol: string;
+  price: number;
+  changeP: number;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stockQuote, setStockQuote] = useState<StockQuote | null>(null);
   const router = useRouter();
   const supabase = createClient();
+
+  // Fetch random stock on mount
+  useEffect(() => {
+    const randomStock = POPULAR_STOCKS[Math.floor(Math.random() * POPULAR_STOCKS.length)];
+    fetch(`/api/market/quote?symbol=${randomStock}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.price) {
+          setStockQuote({
+            symbol: randomStock,
+            price: d.price,
+            changeP: d.changeP || 0
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +77,16 @@ export default function LoginPage() {
             <span className="text-3xl font-headline italic font-bold text-[#00361a]">AlgoVeda</span>
           </Link>
           <h1 className="font-headline text-3xl text-[#0F1A14] mb-2">Welcome back</h1>
-          <p className="font-body text-[#4A5568]">Sign in to access your market intelligence</p>
+          {stockQuote && (
+            <div className="mt-3 inline-flex items-center gap-3 px-4 py-2 bg-white/60 rounded-lg">
+              <span className="font-mono font-bold text-sm">{stockQuote.symbol}</span>
+              <span className="font-data font-bold text-sm">Rs {stockQuote.price?.toLocaleString()}</span>
+              <span className={`font-data text-xs ${stockQuote.changeP >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {stockQuote.changeP >= 0 ? '+' : ''}{stockQuote.changeP.toFixed(2)}%
+              </span>
+            </div>
+          )}
+          <p className="font-body text-[#4A5568] mt-2">Sign in to access your market intelligence</p>
         </div>
 
         <div className="glass-panel p-8 rounded-2xl shadow-elevated">
