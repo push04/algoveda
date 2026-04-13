@@ -13,7 +13,9 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -23,10 +25,12 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session on every request — keeps auth cookies alive.
-  // Use getSession() (cookie-only, no network) to avoid redirect loops.
-  const { data: { session } } = await supabase.auth.getSession();
-  const isLoggedIn = !!session?.user;
+  // IMPORTANT: use getUser() not getSession() — getUser() validates the JWT
+  // against the auth server and refreshes expired tokens. getSession() only
+  // reads the cookie and cannot detect or fix expired tokens, causing false
+  // "not logged in" states for all users.
+  const { data: { user } } = await supabase.auth.getUser();
+  const isLoggedIn = !!user;
 
   const { pathname } = request.nextUrl;
 
