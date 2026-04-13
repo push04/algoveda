@@ -11,7 +11,6 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -34,30 +33,9 @@ export default function SignupPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      setSuccess(true);
+      router.push('/dashboard');
     }
   };
-
-  if (success) {
-    return (
-      <div className="min-h-screen mesh-gradient flex items-center justify-center p-4">
-        <div className="w-full max-w-md text-center">
-          <div className="glass-panel p-8 rounded-2xl shadow-elevated">
-            <div className="w-16 h-16 bg-[#16A34A]/10 rounded-full flex items-center justify-center mx-auto mb-6">
-              <span className="material-symbols-outlined text-[#16A34A] text-[32px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-            </div>
-            <h1 className="font-headline text-2xl text-[#0F1A14] mb-2">Check your email</h1>
-            <p className="font-body text-[#4A5568] mb-6">
-              We've sent a confirmation link to <span className="font-bold">{email}</span>
-            </p>
-            <Link href="/auth/login" className="inline-block py-3 px-6 bg-[#1A4D2E] text-white font-ui font-bold rounded-lg hover:bg-[#143D24] transition-all">
-              Back to Sign In
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen mesh-gradient flex items-center justify-center p-4">
