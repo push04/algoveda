@@ -7,9 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const supabase = await createClient();
 
-  // Use getSession() — local JWT validation, no network round-trip required
-  const { data: { session } } = await supabase.auth.getSession();
-  const user = session?.user;
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   // Check subscription FIRST — before any portfolio fetch

@@ -9,9 +9,7 @@ export const maxDuration = 45;
 export async function POST(request: Request) {
   const supabase = await createClient();
 
-  // Use getSession() — local JWT validation
-  const { data: { session } } = await supabase.auth.getSession();
-  const user = session?.user;
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { jobId } = await request.json();

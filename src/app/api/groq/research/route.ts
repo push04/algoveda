@@ -40,10 +40,7 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const adminSupabase = createAdminClient();
 
-  // Use getSession() — reads JWT from cookie locally without network call
-  // More reliable than getUser() which requires Supabase auth API round-trip
-  const { data: { session } } = await supabase.auth.getSession();
-  const user = session?.user ?? null;
+  const { data: { user } } = await supabase.auth.getUser();
 
   // Check plan
   let plan = 'explorer';
