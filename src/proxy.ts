@@ -23,11 +23,12 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // IMPORTANT: use getUser() not getSession() — validates JWT against auth
-  // server and refreshes expired tokens. getSession() is cookie-only and
-  // treats all users with expired tokens as logged out.
-  const { data: { user } } = await supabase.auth.getUser();
-  const isLoggedIn = !!user;
+  // Use getSession() for routing — fast cookie read, no network call.
+  // Security is enforced by getUser() inside each API route and server action.
+  // Using getUser() here caused false redirects for all users because it
+  // rejects unconfirmed/expired tokens at the routing layer.
+  const { data: { session } } = await supabase.auth.getSession();
+  const isLoggedIn = !!session?.user;
 
   const { pathname } = request.nextUrl;
 

@@ -19,22 +19,28 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-      },
+      options: { data: { full_name: fullName } },
     });
 
-    if (error) {
-      setError(error.message);
+    if (signUpError) {
+      setError(signUpError.message);
       setLoading(false);
-    } else {
-      router.push('/dashboard');
+      return;
     }
+
+    // Sign in immediately to establish a real session cookie regardless of
+    // whether Supabase email confirmation is enabled at the project level.
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) {
+      setError(signInError.message);
+      setLoading(false);
+      return;
+    }
+
+    router.push('/dashboard');
   };
 
   return (
