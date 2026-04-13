@@ -23,12 +23,11 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Optimistic session check from cookie — no network call.
-  // Per Next.js 16 docs: Proxy should only read session from cookie, not make
-  // DB/auth-server calls, to avoid performance issues and redirect loops.
-  // Full token validation happens inside API routes via getUser().
-  const { data: { session } } = await supabase.auth.getSession();
-  const isLoggedIn = !!session?.user;
+  // IMPORTANT: use getUser() not getSession() — validates JWT against auth
+  // server and refreshes expired tokens. getSession() is cookie-only and
+  // treats all users with expired tokens as logged out.
+  const { data: { user } } = await supabase.auth.getUser();
+  const isLoggedIn = !!user;
 
   const { pathname } = request.nextUrl;
 
@@ -41,16 +40,15 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/favicon');
 
-  // Auth-only pages users shouldn't see if already logged in
-  const authOnlyPages = ['/auth/login', '/auth/signup'];
-
+  // Redirect unauthenticated users away from protected pages
   if (!isPublic && !isLoggedIn) {
     const url = new URL('/auth/login', request.url);
     url.searchParams.set('redirect', pathname);
     return NextResponse.redirect(url);
   }
 
-  if (isLoggedIn && authOnlyPages.includes(pathname)) {
+  // Redirect logged-in users away from auth pages
+  if (isLoggedIn && (pathname === '/auth/login' || pathname === '/auth/signup')) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 
