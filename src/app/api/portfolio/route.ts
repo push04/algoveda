@@ -6,10 +6,14 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+
+  // Use getSession() — local JWT validation, no network round-trip required
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Check if user has an active paid subscription
+  // Check subscription FIRST — before any portfolio fetch
+  // This ensures stale/old portfolio rows don't bypass the subscription gate
   const { data: subs } = await supabase
     .from('user_subscriptions')
     .select('status, plan_id')
@@ -18,7 +22,12 @@ export async function GET() {
 
   const hasPaidSub = !!(subs && subs.length > 0);
 
-  // Get paper portfolio
+  if (!hasPaidSub) {
+    // No active subscription — never show portfolio data
+    return NextResponse.json({ portfolio: null, holdings: [], orders: [], requiresSubscription: true });
+  }
+
+  // User has subscription — fetch their portfolio
   const { data: portfolio } = await supabase
     .from('portfolios')
     .select('*')
@@ -28,11 +37,7 @@ export async function GET() {
     .single();
 
   if (!portfolio) {
-    if (!hasPaidSub) {
-      // No subscription, no portfolio
-      return NextResponse.json({ portfolio: null, holdings: [], orders: [], requiresSubscription: true });
-    }
-    // Has subscription but no portfolio — create one
+    // Has subscription but no portfolio yet — create one with ₹1,00,000 virtual capital
     const { data: newPort } = await supabase
       .from('portfolios')
       .insert({

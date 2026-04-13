@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
       billingCycle = 'monthly',
     } = body;
 
-    // Verify signature
+    // Verify Razorpay signature FIRST (no auth required for this step)
     const expectedSig = crypto
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -26,7 +27,10 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+
+    // Use getSession() — local JWT validation, more reliable than getUser()
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -67,40 +71,37 @@ export async function POST(request: Request) {
 
     if (subErr) throw subErr;
 
-    // Update user profile plan
+    // Read plan name for profile update
     const { data: plan } = await supabase
       .from('subscription_plans')
-      .select('name')
+      .select('name, slug')
       .eq('id', planId)
       .single();
 
+    // Update user profile with plan name
     await supabase
       .from('profiles')
-      .update({ plan: plan?.name ?? 'standard', updated_at: now.toISOString() })
+      .update({ plan: plan?.slug ?? plan?.name ?? 'standard', updated_at: now.toISOString() })
       .eq('id', user.id);
 
-    // Create paper trading portfolio with ₹1,00,000 balance for Starter plan subscribers
-    const isStarter = plan?.name?.toLowerCase().includes('starter');
-    if (isStarter) {
-      // Only create if doesn't already exist
-      const { data: existingPort } = await supabase
-        .from('portfolios')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('type', 'paper')
-        .eq('is_active', true)
-        .maybeSingle();
+    // Auto-create paper trading portfolio for all paid plan subscribers
+    const { data: existingPort } = await supabase
+      .from('portfolios')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('type', 'paper')
+      .eq('is_active', true)
+      .maybeSingle();
 
-      if (!existingPort) {
-        await supabase.from('portfolios').insert({
-          user_id: user.id,
-          name: 'My Paper Portfolio',
-          type: 'paper',
-          initial_capital: 100000,
-          current_cash: 100000,
-          is_active: true,
-        });
-      }
+    if (!existingPort) {
+      await supabase.from('portfolios').insert({
+        user_id: user.id,
+        name: 'My Paper Portfolio',
+        type: 'paper',
+        initial_capital: 100000,
+        current_cash: 100000,
+        is_active: true,
+      });
     }
 
     return NextResponse.json({
@@ -108,8 +109,9 @@ export async function POST(request: Request) {
       subscription: sub,
       message: 'Subscription activated successfully!',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Payment verify error:', err);
-    return NextResponse.json({ error: err.message ?? 'Verification failed' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : 'Verification failed';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

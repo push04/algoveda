@@ -23,22 +23,20 @@ export async function proxy(request: NextRequest) {
     }
   );
 
+  // IMPORTANT: Always call getUser() to refresh session cookies — DO NOT remove this
   const { data: { user } } = await supabase.auth.getUser();
   const { pathname } = request.nextUrl;
 
   // Public routes — no auth required
-  const publicPrefixes = [
-    '/',
-    '/auth/',
-    '/api/',
-    '/pricing',
-    '/_next/',
-    '/favicon',
-  ];
-  
-  const isPublic = publicPrefixes.some(p =>
-    p.endsWith('/') ? pathname.startsWith(p) : pathname === p
-  );
+  // NOTE: '/' alone as startsWith matches EVERYTHING — list public routes explicitly
+  const isPublic =
+    pathname === '/' ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/api/') ||
+    pathname === '/pricing' ||
+    pathname.startsWith('/pricing') ||
+    pathname.startsWith('/_next/') ||
+    pathname.startsWith('/favicon');
 
   // Auth-only pages users shouldn't see if already logged in
   const authOnlyPages = ['/auth/login', '/auth/signup'];

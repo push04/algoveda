@@ -40,8 +40,10 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const adminSupabase = createAdminClient();
 
-  // Get authenticated user
-  const { data: { user } } = await supabase.auth.getUser();
+  // Use getSession() — reads JWT from cookie locally without network call
+  // More reliable than getUser() which requires Supabase auth API round-trip
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
 
   // Check plan
   let plan = 'explorer';
@@ -64,7 +66,7 @@ export async function GET(request: Request) {
         .gte('used_at', windowStart);
 
       if ((count ?? 0) >= FREE_LIMIT) {
-        const resetTime = new Date(Date.now() + 30 * 60 * 1000); // next check in 30 min approx
+        const resetTime = new Date(Date.now() + 30 * 60 * 1000);
         return NextResponse.json({
           error: `Free plan allows ${FREE_LIMIT} AI researches every ${WINDOW_HOURS} hours. Upgrade to Pro for unlimited access.`,
           rateLimited: true,
@@ -151,9 +153,11 @@ Be precise, data-driven, and use Indian market context. sentimentScore is 0-100 
       report = { error: 'Parse failed', raw };
     }
 
-    // Record usage for free users
+    // Record usage for free users (ignore errors — don't let tracking block response)
     if (user && !isPaidUser) {
-      await adminSupabase.from('research_usage').insert({ user_id: user.id, symbol });
+      try {
+        await adminSupabase.from('research_usage').insert({ user_id: user.id, symbol });
+      } catch { /* ignore */ }
     }
 
     return NextResponse.json({

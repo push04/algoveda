@@ -149,7 +149,11 @@ export default function ResearchPage() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setPaperToast(`✅ Bought 1 share of ${result.symbol} @ ₹${price.toFixed(2)} in your paper portfolio!`);
+        if (data.marketOpen) {
+          setPaperToast(`✅ Bought 1 share of ${result.symbol} @ ₹${price.toFixed(2)} in your paper portfolio!`);
+        } else {
+          setPaperToast(`⏰ Order placed! ${data.marketNote ?? 'Will execute when market opens at 9:15 AM IST.'}`);
+        }
         // Reload portfolio balance
         const pRes = await fetch('/api/portfolio');
         if (pRes.ok) { const pd = await pRes.json(); setPortfolio(pd.portfolio); }

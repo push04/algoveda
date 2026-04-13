@@ -4,8 +4,8 @@ import { cookies } from 'next/headers';
 // Extended type that includes auth methods
 interface AuthClient {
   auth: {
-    getUser(): Promise<{ data: { user: { id: string; email: string } | null }; error: Error | null }>;
-    getSession(): Promise<{ data: { session: { access_token: string; user: { id: string } } | null }; error: Error | null }>;
+    getUser(): Promise<{ data: { user: { id: string; email?: string; phone?: string } | null }; error: Error | null }>;
+    getSession(): Promise<{ data: { session: { access_token: string; refresh_token: string; user: { id: string; email?: string; phone?: string } } | null }; error: Error | null }>;
     exchangeCodeForSession(code: string): Promise<{ error: Error | null }>;
     signOut(): Promise<{ error: Error | null }>;
   };

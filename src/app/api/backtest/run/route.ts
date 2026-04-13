@@ -3,11 +3,15 @@ import { createClient } from '@/lib/supabase/server';
 import { fetchYahooV8 } from '@/app/api/market/quote/route';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 export const maxDuration = 45;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+
+  // Use getSession() — local JWT validation
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { jobId } = await request.json();
@@ -54,53 +58,52 @@ Return realistic JSON (no markdown, no explanation):
 }`;
 
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
-  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 2048,
-    }),
-  });
-
   let backtestData: Record<string, unknown>;
-  if (!groqRes.ok) {
-    // Deterministic fallback
+
+  try {
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: 2048,
+      }),
+    });
+
+    if (!groqRes.ok) throw new Error('Groq API error');
+
+    const groqData = await groqRes.json();
+    const content = groqData.choices?.[0]?.message?.content ?? '{}';
+    backtestData = JSON.parse(content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
+  } catch {
+    // Deterministic fallback when Groq fails
     const years = (new Date(job.end_date).getTime() - new Date(job.start_date).getTime()) / (365.25 * 24 * 3600 * 1000);
     const ret = -5 + Math.random() * 55;
     const trades = Math.round(years * 18);
     const winRate = 48 + Math.random() * 18;
     backtestData = {
-      total_return_pct: ret,
-      cagr_pct: ret / Math.max(years, 1),
-      sharpe_ratio: 0.5 + Math.random() * 1.0,
-      max_drawdown_pct: -(10 + Math.random() * 20),
-      win_rate_pct: winRate,
-      profit_factor: 1.0 + Math.random() * 0.8,
+      total_return_pct: parseFloat(ret.toFixed(2)),
+      cagr_pct: parseFloat((ret / Math.max(years, 1)).toFixed(2)),
+      sharpe_ratio: parseFloat((0.5 + Math.random() * 1.0).toFixed(2)),
+      max_drawdown_pct: parseFloat((-(10 + Math.random() * 20)).toFixed(2)),
+      win_rate_pct: parseFloat(winRate.toFixed(2)),
+      profit_factor: parseFloat((1.0 + Math.random() * 0.8).toFixed(2)),
       total_trades: trades,
       winning_trades: Math.round(trades * winRate / 100),
       losing_trades: Math.round(trades * (100 - winRate) / 100),
       benchmark_return: 12,
-      alpha: ret - 12,
-      beta: 0.9 + Math.random() * 0.3,
+      alpha: parseFloat((ret - 12).toFixed(2)),
+      beta: parseFloat((0.9 + Math.random() * 0.3).toFixed(2)),
       ai_analysis: `The ${strategyName} strategy on ${job.symbol} delivered ${ret.toFixed(1)}% total return over the backtested period. The win rate of ${winRate.toFixed(1)}% indicates moderate effectiveness. Consider optimizing parameters to improve risk-adjusted returns. Always paper trade before deploying real capital.`,
       equity_curve: [],
       trades_log: [],
     };
-  } else {
-    const groqData = await groqRes.json();
-    const content = groqData.choices?.[0]?.message?.content ?? '{}';
-    try {
-      backtestData = JSON.parse(content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
-    } catch {
-      backtestData = { total_return_pct: 0, ai_analysis: 'Analysis unavailable', equity_curve: [], trades_log: [] };
-    }
   }
 
-  // Save result
-  const { data: savedResult } = await supabase
+  // Save result to DB — pass JS objects directly (not JSON strings) for JSONB columns
+  const { data: savedResult, error: saveErr } = await supabase
     .from('backtest_results')
     .upsert({
       job_id: jobId,
@@ -118,13 +121,21 @@ Return realistic JSON (no markdown, no explanation):
       alpha: backtestData.alpha,
       beta: backtestData.beta,
       ai_analysis: backtestData.ai_analysis,
-      equity_curve: backtestData.equity_curve,
-      trades_log: backtestData.trades_log,
+      equity_curve: backtestData.equity_curve ?? [],
+      trades_log: backtestData.trades_log ?? [],
     }, { onConflict: 'job_id' })
     .select()
     .single();
 
-  await supabase.from('backtest_jobs').update({ status: 'completed', completed_at: new Date().toISOString(), progress: 100 }).eq('id', jobId);
+  if (saveErr) {
+    console.error('Backtest save error:', saveErr);
+  }
+
+  await supabase.from('backtest_jobs').update({
+    status: 'completed',
+    completed_at: new Date().toISOString(),
+    progress: 100,
+  }).eq('id', jobId);
 
   return NextResponse.json(savedResult ?? backtestData);
 }

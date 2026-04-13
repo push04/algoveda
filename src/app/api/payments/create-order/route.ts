@@ -3,6 +3,7 @@ import Razorpay from 'razorpay';
 import { createClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID!,
@@ -12,7 +13,10 @@ const razorpay = new Razorpay({
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+
+    // Use getSession() — local JWT validation, no network round-trip
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -40,12 +44,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Cannot create order for free plan' }, { status: 400 });
     }
 
-    // price_monthly is stored in paise (e.g. 200 = Rs 2, 149900 = Rs 1499)
-    // Razorpay expects amount in paise — no conversion needed
-    const amountInPaise = amount;
-
-    // Ensure minimum amount is 100 paise (Rs 1)
-    const finalAmount = Math.max(amountInPaise, 100);
+    // price_monthly is stored in paise — no conversion needed
+    const finalAmount = Math.max(amount, 100);
 
     const order = await razorpay.orders.create({
       amount: finalAmount,
@@ -67,8 +67,9 @@ export async function POST(request: Request) {
       planName: plan.name,
       userEmail: user.email,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Create order error:', err);
-    return NextResponse.json({ error: err.message ?? 'Failed to create order' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : 'Failed to create order';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

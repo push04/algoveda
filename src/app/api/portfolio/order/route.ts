@@ -3,10 +3,46 @@ import { createClient } from '@/lib/supabase/server';
 import { fetchYahooV8 } from '@/app/api/market/quote/route';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+// NSE market hours: Mon–Fri, 9:15 AM – 3:30 PM IST
+function isMarketOpen(): boolean {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const day = ist.getDay(); // 0=Sun, 6=Sat
+  const h = ist.getHours();
+  const m = ist.getMinutes();
+  const totalMins = h * 60 + m;
+  return day >= 1 && day <= 5 && totalMins >= 555 && totalMins < 930; // 9:15–15:30
+}
+
+function nextMarketOpenIST(): string {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const day = ist.getDay();
+  // Days until next Monday if it's weekend
+  const daysUntilOpen = day === 0 ? 1 : day === 6 ? 2 : 1;
+  const next = new Date(ist);
+  const h = ist.getHours();
+  const m = ist.getMinutes();
+  const totalMins = h * 60 + m;
+  // If before 9:15 today (weekday), open today
+  if (day >= 1 && day <= 5 && totalMins < 555) {
+    next.setHours(9, 15, 0, 0);
+  } else {
+    // Next trading day
+    next.setDate(next.getDate() + daysUntilOpen);
+    next.setHours(9, 15, 0, 0);
+  }
+  return next.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+
+  // Use getSession() — local JWT validation, no network round-trip
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
@@ -25,6 +61,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'side must be BUY or SELL' }, { status: 400 });
   }
 
+  const marketOpen = isMarketOpen();
+
   // Fetch portfolio
   const { data: portfolio } = await supabase
     .from('portfolios')
@@ -34,17 +72,23 @@ export async function POST(request: Request) {
     .eq('is_active', true)
     .single();
 
-  if (!portfolio) return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 });
+  if (!portfolio) return NextResponse.json({ error: 'Portfolio not found. Please subscribe to activate paper trading.' }, { status: 404 });
 
-  // Fetch live price
+  // Fetch live price (or last known price if market is closed)
   const quote = await fetchYahooV8(symbol.toUpperCase());
   if (!quote || !quote.price) {
-    return NextResponse.json({ error: `Could not fetch live price for ${symbol}` }, { status: 400 });
+    return NextResponse.json({ error: `Could not fetch price for ${symbol}. Try again during market hours.` }, { status: 400 });
   }
 
   const execPrice = order_type === 'LIMIT' && limit_price ? parseFloat(limit_price) : quote.price;
   const totalCost = execPrice * quantity;
   const sideCaps = side.toUpperCase() as 'BUY' | 'SELL';
+
+  // Outside market hours — accept order as PENDING, will execute at open
+  const orderStatus = marketOpen ? 'EXECUTED' : 'PENDING';
+  const marketNote = marketOpen
+    ? null
+    : `Market is closed. Your order will be executed at ₹${execPrice.toFixed(2)} when NSE opens on ${nextMarketOpenIST()} IST. Price may vary at execution.`;
 
   if (sideCaps === 'BUY') {
     if (portfolio.current_cash < totalCost) {
@@ -53,13 +97,13 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Deduct cash
+    // Deduct cash immediately (reserved for pending orders too)
     await supabase
       .from('portfolios')
       .update({ current_cash: portfolio.current_cash - totalCost })
       .eq('id', portfolio.id);
 
-    // Upsert holding (average down/up)
+    // Upsert holding
     const { data: existing } = await supabase
       .from('portfolio_holdings')
       .select('*')
@@ -102,7 +146,6 @@ export async function POST(request: Request) {
     }
 
     const proceeds = execPrice * quantity;
-    // Add cash back
     await supabase
       .from('portfolios')
       .update({ current_cash: portfolio.current_cash + proceeds })
@@ -129,7 +172,7 @@ export async function POST(request: Request) {
       quantity,
       order_type,
       executed_price: execPrice,
-      status: 'EXECUTED',
+      status: orderStatus,
     })
     .select()
     .single();
@@ -139,6 +182,10 @@ export async function POST(request: Request) {
     order,
     executedPrice: execPrice,
     totalValue: totalCost,
-    message: `${sideCaps} ${quantity} × ${symbol.toUpperCase()} @ ₹${execPrice.toFixed(2)} executed`,
+    marketOpen,
+    marketNote,
+    message: marketOpen
+      ? `${sideCaps} ${quantity} × ${symbol.toUpperCase()} @ ₹${execPrice.toFixed(2)} executed successfully`
+      : `Order placed! ${marketNote}`,
   });
 }

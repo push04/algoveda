@@ -40,11 +40,13 @@ const PLAN_COLORS: Record<string, string> = {
 export default function PricingPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userLoading, setUserLoading] = useState(true);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [paying, setPaying] = useState<string | null>(null);
-  const [user, setUser] = useState<{ id: string; email?: string; name?: string } | null>(null);
+  // sessionUser: null=unknown, false=not logged in, object=logged in
+  const [sessionUser, setSessionUser] = useState<{ id: string; email?: string; name?: string } | false | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  // Create a single stable supabase client reference
   const supabase = createClient();
 
   useEffect(() => {
@@ -69,29 +71,17 @@ export default function PricingPage() {
       setLoading(false);
     });
 
-    // Resolve current session immediately — avoids race condition where user is null on first render
+    // Resolve session using getSession() — reads directly from cookie, no network call
+    // This runs immediately and avoids any onAuthStateChange race conditions
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         const u = session.user;
         const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', u.id).single();
-        setUser({ id: u.id, email: u.email, name: profile?.full_name });
-      }
-      setUserLoading(false);
-    });
-
-    // Also watch for auth changes (login/logout while page is open)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const u = session.user;
-        const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', u.id).single();
-        setUser({ id: u.id, email: u.email, name: profile?.full_name });
+        setSessionUser({ id: u.id, email: u.email ?? undefined, name: profile?.full_name ?? undefined });
       } else {
-        setUser(null);
+        setSessionUser(false); // Confirmed: not logged in
       }
-      setUserLoading(false);
     });
-
-    return () => subscription.unsubscribe();
   }, []);
 
   const showToast = (msg: string, ok = true) => {
@@ -100,9 +90,12 @@ export default function PricingPage() {
   };
 
   const handlePurchase = async (plan: Plan) => {
-    // Wait for session check to complete before deciding to redirect
-    if (userLoading) return;
-    if (!user) {
+    // ALWAYS do a fresh session check at the moment of purchase
+    // Never rely on stale React state for payment authorization
+    const { data: { session } } = await supabase.auth.getSession();
+    const currentUser = session?.user ?? null;
+
+    if (!currentUser) {
       window.location.href = `/auth/login?redirect=/pricing`;
       return;
     }
@@ -116,25 +109,23 @@ export default function PricingPage() {
     const { data: existingSub } = await supabase
       .from('user_subscriptions')
       .select('status')
-      .eq('user_id', user.id)
+      .eq('user_id', currentUser.id)
       .in('status', ['active', 'trialing'])
       .eq('plan_id', plan.id)
       .maybeSingle();
 
     if (existingSub?.status) {
       showToast(`You already have an active ${plan.name} subscription!`);
-      if (plan.slug === 'starter') {
-        setTimeout(() => { window.location.href = '/learn'; }, 1500);
-      } else {
-        setTimeout(() => { window.location.href = '/dashboard'; }, 1500);
-      }
+      setTimeout(() => {
+        window.location.href = plan.slug === 'starter' ? '/learn' : '/dashboard';
+      }, 1500);
       return;
     }
 
     setPaying(plan.id);
 
     try {
-      // Create Razorpay order
+      // Create Razorpay order via server API
       const res = await fetch('/api/payments/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -147,16 +138,15 @@ export default function PricingPage() {
         return;
       }
 
-      // Wait for Razorpay to be ready
+      // Ensure Razorpay SDK is loaded
       if (typeof window.Razorpay === 'undefined') {
-        // Try loading again
         await new Promise<void>((resolve) => {
           const script = document.createElement('script');
           script.src = 'https://checkout.razorpay.com/v1/checkout.js';
           script.onload = () => resolve();
           script.onerror = () => resolve();
           document.body.appendChild(script);
-          setTimeout(resolve, 3000);
+          setTimeout(resolve, 4000);
         });
       }
 
@@ -166,6 +156,10 @@ export default function PricingPage() {
         return;
       }
 
+      // Use live session user data for prefill (currentUser.email comes from JWT, always available)
+      const userEmail = currentUser.email;
+      const userName = sessionUser && typeof sessionUser === 'object' ? sessionUser.name : undefined;
+
       const rzp = new window.Razorpay({
         key: order.keyId,
         amount: order.amount,
@@ -173,7 +167,7 @@ export default function PricingPage() {
         name: 'AlgoVeda',
         description: `${order.planName} Plan`,
         order_id: order.orderId,
-        prefill: { email: user.email, name: user.name },
+        prefill: { email: userEmail, name: userName },
         theme: { color: '#1A4D2E' },
         modal: {
           ondismiss: () => {
@@ -209,7 +203,7 @@ export default function PricingPage() {
         },
       });
 
-      rzp.on('payment.failed', (response: any) => {
+      rzp.on('payment.failed', (response: { error?: { description?: string } }) => {
         showToast(`Payment failed: ${response.error?.description ?? 'Unknown error'}`, false);
         setPaying(null);
       });
@@ -265,7 +259,7 @@ export default function PricingPage() {
           <span className="font-headline italic text-lg text-[#1A4D2E] font-bold">AlgoVeda</span>
         </Link>
         <div className="flex gap-3">
-          {user ? (
+          {sessionUser ? (
             <Link href="/dashboard" className="px-4 py-2 bg-[#1A4D2E] text-white text-sm font-ui font-bold rounded-lg hover:bg-[#143D24] transition-colors">
               Dashboard
             </Link>
@@ -390,7 +384,7 @@ export default function PricingPage() {
                     {paying === plan.id ? (
                       <><span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" /> Processing...</>
                     ) : plan.price_monthly === 0 ? (
-                      user ? 'Current Plan' : 'Get Started Free'
+                      sessionUser ? 'Current Plan' : 'Get Started Free'
                     ) : plan.slug === 'starter' ? (
                       <><span className="material-symbols-outlined text-[16px]">lock_open</span> Unlock for ₹2</>
                     ) : (

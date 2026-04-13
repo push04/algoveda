@@ -88,129 +88,37 @@ export default function BacktestResultPage({ params }: { params: Promise<{ id: s
       // Update status to running
       await supabase.from('backtest_jobs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', jobData.id);
 
-      // Fetch live price for context
-      const quoteRes = await fetch(`/api/market/quote?symbol=${jobData.symbol}`);
-      const quoteData = quoteRes.ok ? await quoteRes.json() : null;
-
-      const params = jobData.parameters as any;
-      const strategyType = params?.strategy_type ?? 'rsi';
-      const strategyName = params?.strategy_name ?? 'RSI Mean Reversion';
-
-      // Use Groq to simulate backtest results
-      const prompt = `You are a quantitative finance backtesting engine for Indian equity markets.
-
-Simulate a backtest for:
-- Symbol: ${jobData.symbol} (NSE)
-- Strategy: ${strategyName} (${strategyType})
-- Period: ${jobData.start_date} to ${jobData.end_date}
-- Capital: ₹${jobData.initial_capital.toLocaleString()}
-- Parameters: ${JSON.stringify(params)}
-- Current Price: ${quoteData?.price ? `₹${quoteData.price}` : 'N/A'}
-
-Return a realistic JSON backtest result (no markdown):
-{
-  "total_return_pct": <realistic number, can be negative>,
-  "cagr_pct": <annualized return>,
-  "sharpe_ratio": <between -1 and 3>,
-  "max_drawdown_pct": <negative number, e.g. -18.5>,
-  "win_rate_pct": <40-70>,
-  "profit_factor": <0.8 to 2.5>,
-  "total_trades": <realistic count based on period>,
-  "winning_trades": <based on win_rate>,
-  "losing_trades": <total - winning>,
-  "benchmark_return": <Nifty50 return for same period>,
-  "alpha": <outperformance vs benchmark>,
-  "beta": <0.6 to 1.4>,
-  "ai_analysis": "<3-4 sentence analysis of strategy performance, key observations, and recommendations>",
-  "equity_curve": [{"date": "YYYY-MM-DD", "value": <portfolio value>}, ...generate 12 monthly data points],
-  "trades_log": [{"date": "YYYY-MM-DD", "action": "BUY/SELL", "price": <price>, "qty": <shares>, "pnl": <pnl if sell>}, ...generate 8-15 sample trades]
-}`;
-
-      const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      // Always use the server-side API (which has the Groq key securely)
+      // Never call Groq directly from the client — API key is server-only
+      const serverRes = await fetch('/api/backtest/run', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_GROQ_KEY ?? ''}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.4,
-          max_tokens: 2048,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId: jobData.id }),
       });
 
-      // If Groq call fails from client (no API key exposed), use server-side endpoint
-      let backtestData: Record<string, unknown> | null = null;
-      if (!groqRes.ok) {
-        const serverRes = await fetch('/api/backtest/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobId: jobData.id }),
-        });
-        if (serverRes.ok) {
-          backtestData = await serverRes.json();
+      if (serverRes.ok) {
+        const savedResult = await serverRes.json();
+        // Reload the job result from DB to get the cleaned/typed version
+        const { data: resultData } = await supabase
+          .from('backtest_results')
+          .select('*')
+          .eq('job_id', jobData.id)
+          .maybeSingle();
+        if (resultData) {
+          setResult(resultData as BacktestResult);
+        } else {
+          // Use what the API returned directly as fallback
+          setResult(savedResult as BacktestResult);
         }
       } else {
-        const groqData = await groqRes.json();
-        const content = groqData.choices?.[0]?.message?.content ?? '{}';
-        try {
-          const parsed = JSON.parse(content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
-          backtestData = parsed;
-        } catch {
-          backtestData = null;
-        }
+        const errData = await serverRes.json().catch(() => ({ error: 'Server error' }));
+        throw new Error(errData.error ?? `Server returned ${serverRes.status}`);
       }
-
-      if (!backtestData) {
-        // Generate deterministic fallback results
-        const years = (new Date(jobData.end_date).getTime() - new Date(jobData.start_date).getTime()) / (365.25 * 24 * 3600 * 1000);
-        const totalReturn = (Math.random() * 60 - 10);
-        const trades = Math.round(years * 18);
-        const winRate = 45 + Math.random() * 20;
-        backtestData = {
-          total_return_pct: totalReturn,
-          cagr_pct: totalReturn / years,
-          sharpe_ratio: 0.4 + Math.random() * 1.2,
-          max_drawdown_pct: -(10 + Math.random() * 20),
-          win_rate_pct: winRate,
-          profit_factor: 0.9 + Math.random() * 1.2,
-          total_trades: trades,
-          winning_trades: Math.round(trades * winRate / 100),
-          losing_trades: Math.round(trades * (1 - winRate / 100)),
-          benchmark_return: 12 + Math.random() * 8,
-          alpha: totalReturn - 15,
-          beta: 0.8 + Math.random() * 0.4,
-          ai_analysis: `The ${strategyName} strategy on ${jobData.symbol} showed ${totalReturn > 0 ? 'positive' : 'mixed'} results over the backtested period. The strategy generated ${trades} trades with a win rate of ${winRate.toFixed(1)}%. Risk management is critical — consider refining stop-loss levels to improve the drawdown profile. Past performance does not guarantee future results.`,
-          equity_curve: [],
-          trades_log: [],
-        };
-      }
-
-      // Save result to DB
-      const { data: savedResult } = await supabase
-        .from('backtest_results')
-        .insert({
-          job_id: jobData.id,
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          ...backtestData,
-          equity_curve: JSON.stringify(backtestData.equity_curve ?? []),
-          trades_log: JSON.stringify(backtestData.trades_log ?? []),
-        })
-        .select()
-        .single();
-
-      await supabase.from('backtest_jobs').update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        progress: 100,
-      }).eq('id', jobData.id);
-
-      if (savedResult) setResult(savedResult as BacktestResult);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to run backtest. Please try again.';
       console.error('Backtest run error:', err);
-      setError('Failed to run backtest. Please try again.');
-      await supabase.from('backtest_jobs').update({ status: 'failed', error_message: err.message }).eq('id', jobData.id);
+      setError(msg);
+      await supabase.from('backtest_jobs').update({ status: 'failed' }).eq('id', jobData.id);
     }
     setRunning(false);
   }
