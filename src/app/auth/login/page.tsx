@@ -2,8 +2,8 @@
 
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 const POPULAR_STOCKS = ['RELIANCE', 'HDFCBANK', 'INFY', 'TCS', 'SBIN', 'ICICIBANK', 'TITAN', 'WIPRO', 'BAJFINANCE', 'MARUTI'];
 
@@ -13,13 +13,15 @@ interface StockQuote {
   changeP: number;
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stockQuote, setStockQuote] = useState<StockQuote | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/dashboard';
   const supabase = createClient();
 
   // Fetch random stock on mount
@@ -71,14 +73,14 @@ export default function LoginPage() {
       return;
     }
 
-    router.push('/dashboard');
+    router.push(redirectTo);
   };
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
       },
     });
   };
@@ -205,5 +207,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen mesh-gradient" />}>
+      <LoginForm />
+    </Suspense>
   );
 }
