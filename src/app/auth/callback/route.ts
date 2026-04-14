@@ -8,32 +8,52 @@ export async function GET(request: NextRequest) {
   const next = requestUrl.searchParams.get('next') ?? '/dashboard';
   const errorParam = requestUrl.searchParams.get('error');
 
-  // Surface any Supabase error params (e.g. expired link)
   if (errorParam) {
     const desc = requestUrl.searchParams.get('error_description') ?? 'Authentication error';
     return NextResponse.redirect(
-      new URL(`/auth/login?error=${encodeURIComponent(desc)}`, request.url)
+      new URL(`/auth/login?error=${encodeURIComponent(desc)}`, requestUrl.origin)
     );
   }
 
-  // PKCE flow: exchange code for session (email confirm, OAuth)
   if (code) {
     const supabase = await createClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (!error) {
-      // Use absolute redirect so Vercel edge doesn't strip Set-Cookie headers
+    if (!error && data.session) {
       const redirectUrl = new URL(next, requestUrl.origin);
-      return NextResponse.redirect(redirectUrl);
+      const response = NextResponse.redirect(redirectUrl);
+      
+      const { createServerClient } = await import('@supabase/ssr');
+      const supabaseServerClient = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return request.cookies.getAll();
+            },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value }) => {
+                request.cookies.set(name, value);
+                response.cookies.set(name, value);
+              });
+            },
+          },
+        }
+      );
+      
+      await supabaseServerClient.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+      
+      return response;
     }
 
     return NextResponse.redirect(
-      new URL('/auth/login?error=auth_callback_error', request.url)
+      new URL('/auth/login?error=auth_callback_error', requestUrl.origin)
     );
   }
 
-  // No code and no error — could be a fragment (#access_token) flow.
-  // Fragments are client-side only; redirect to update-password which
-  // listens to onAuthStateChange to pick up the token.
-  return NextResponse.redirect(new URL('/auth/update-password', request.url));
+  return NextResponse.redirect(new URL('/auth/update-password', requestUrl.origin));
 }
