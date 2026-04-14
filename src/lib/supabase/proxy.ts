@@ -56,7 +56,10 @@ export async function updateSession(request: NextRequest) {
     const response = NextResponse.redirect(url);
     supabaseResponse.cookies
       .getAll()
-      .forEach(({ name, value }) => response.cookies.set(name, value));
+      .forEach((cookie) => {
+        const { name, value, ...options } = cookie;
+        response.cookies.set(name, value, options);
+      });
     supabaseResponse.headers.forEach((value, key) => response.headers.set(key, value));
     applyNoCacheHeaders(response);
     return response;
