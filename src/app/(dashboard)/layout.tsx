@@ -11,8 +11,9 @@ export default async function DashboardLayout({
   // Server-side auth guard — backup in case middleware misses edge cases
   const supabase = await createClient();
   const { data: jwtData } = await supabase.auth.getClaims();
+  const { data: sessionData } = await supabase.auth.getSession();
 
-  if (!jwtData?.claims) {
+  if (!jwtData?.claims && !sessionData?.session?.user) {
     redirect('/auth/login');
   }
 

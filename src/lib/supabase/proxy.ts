@@ -39,9 +39,14 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Validate/refresh auth token in proxy before protected routes render.
-  const { data } = await supabase.auth.getClaims();
-  const isLoggedIn = !!data?.claims;
+  // Primary check: verified claims.
+  // Fallback: cookie session (avoids false redirects when auth network is flaky).
+  const { data: claimsData } = await supabase.auth.getClaims();
+  let isLoggedIn = !!claimsData?.claims;
+  if (!isLoggedIn) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    isLoggedIn = !!sessionData?.session?.user;
+  }
   const { pathname } = request.nextUrl;
 
   const isPublic =
