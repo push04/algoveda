@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 
 const POPULAR_STOCKS = ['RELIANCE', 'HDFCBANK', 'INFY', 'TCS', 'SBIN', 'ICICIBANK', 'TITAN', 'WIPRO', 'BAJFINANCE', 'MARUTI'];
 
@@ -19,24 +19,16 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stockQuote, setStockQuote] = useState<StockQuote | null>(null);
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/dashboard';
   const supabase = createClient();
 
-  // Fetch random stock on mount
   useEffect(() => {
     const randomStock = POPULAR_STOCKS[Math.floor(Math.random() * POPULAR_STOCKS.length)];
     fetch(`/api/market/quote?symbol=${randomStock}`)
       .then(r => r.json())
       .then(d => {
-        if (d.price) {
-          setStockQuote({
-            symbol: randomStock,
-            price: d.price,
-            changeP: d.changeP || 0
-          });
-        }
+        if (d.price) setStockQuote({ symbol: randomStock, price: d.price, changeP: d.changeP || 0 });
       })
       .catch(() => {});
   }, []);
@@ -46,15 +38,13 @@ function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      if (error.message.includes('Invalid login') || error.message.includes('invalid') || error.message.includes('credentials')) {
+      const msg = error.message.toLowerCase();
+      if (msg.includes('invalid') || msg.includes('credentials')) {
         setError('Invalid email or password. Please try again.');
-      } else if (error.message.includes('Too many requests')) {
+      } else if (msg.includes('too many')) {
         setError('Too many attempts. Please wait a minute and try again.');
       } else {
         setError(error.message);
@@ -63,7 +53,9 @@ function LoginForm() {
       return;
     }
 
-    router.push(redirectTo);
+    // Full page reload — guarantees session cookies are sent with the next request.
+    // router.push() skips this and can cause redirect loops on Vercel/Edge.
+    window.location.href = redirectTo;
   };
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
@@ -182,7 +174,7 @@ function LoginForm() {
           </div>
 
           <p className="text-center text-sm font-body text-[#4A5568] mt-6">
-            Don't have an account?{' '}
+            Don&apos;t have an account?{' '}
             <Link href="/auth/signup" className="font-ui font-bold text-[#1A4D2E] hover:underline">
               Sign up for free
             </Link>

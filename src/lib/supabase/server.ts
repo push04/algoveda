@@ -1,21 +1,10 @@
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-// Extended type that includes auth methods
-interface AuthClient {
-  auth: {
-    getUser(): Promise<{ data: { user: { id: string; email?: string; phone?: string } | null }; error: Error | null }>;
-    getSession(): Promise<{ data: { session: { access_token: string; refresh_token: string; user: { id: string; email?: string; phone?: string } } | null }; error: Error | null }>;
-    exchangeCodeForSession(code: string): Promise<{ error: Error | null }>;
-    signOut(): Promise<{ error: Error | null }>;
-  };
-  from(table: string): any;
-}
-
 export async function createClient() {
   const cookieStore = await cookies();
 
-  const client = createServerClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -29,13 +18,11 @@ export async function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // ignore
+            // setAll throws in Server Components (read-only context) — safe to ignore.
+            // Cookies will be set by proxy/middleware or route handlers.
           }
         },
       },
     }
   );
-
-  // Return with type assertion
-  return client as AuthClient;
 }

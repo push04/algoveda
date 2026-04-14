@@ -3,7 +3,6 @@
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -11,7 +10,6 @@ export default function SignupPage() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
   const supabase = createClient();
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -31,8 +29,7 @@ export default function SignupPage() {
       return;
     }
 
-    // Sign in immediately to establish a real session cookie regardless of
-    // whether Supabase email confirmation is enabled at the project level.
+    // Sign in immediately to create a real session
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     if (signInError) {
       setError(signInError.message);
@@ -40,7 +37,8 @@ export default function SignupPage() {
       return;
     }
 
-    router.push('/dashboard');
+    // Full reload — guarantees session cookies are present on the next request
+    window.location.href = '/dashboard';
   };
 
   return (

@@ -13,7 +13,9 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
+          // Step 1: update the request-side cookies so subsequent reads see them
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          // Step 2: create a fresh response carrying those cookies to the browser
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
@@ -23,16 +25,15 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Use getSession() for routing — fast cookie read, no network call.
-  // Security is enforced by getUser() inside each API route and server action.
-  // Using getUser() here caused false redirects for all users because it
-  // rejects unconfirmed/expired tokens at the routing layer.
-  const { data: { session } } = await supabase.auth.getSession();
-  const isLoggedIn = !!session?.user;
+  // getSession() is fast (reads cookies). Safe for routing decisions.
+  // getUser() (network call) is used inside individual API routes / server actions.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
+  const isLoggedIn = !!session?.user;
   const { pathname } = request.nextUrl;
 
-  // Public routes — no auth required
   const isPublic =
     pathname === '/' ||
     pathname.startsWith('/auth/') ||
@@ -41,18 +42,29 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/favicon');
 
-  // Redirect unauthenticated users away from protected pages
+  // Helper: redirect while carrying any refreshed session cookies
+  function redirectWith(url: URL): NextResponse {
+    const res = NextResponse.redirect(url);
+    // Forward any cookies Supabase may have refreshed during this request
+    supabaseResponse.cookies.getAll().forEach(({ name, value }) => {
+      res.cookies.set(name, value);
+    });
+    return res;
+  }
+
+  // Unauthenticated user hitting a protected route
   if (!isPublic && !isLoggedIn) {
     const url = new URL('/auth/login', request.url);
     url.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(url);
+    return redirectWith(url);
   }
 
-  // Redirect logged-in users away from auth pages
+  // Authenticated user hitting login/signup — send to dashboard
   if (isLoggedIn && (pathname === '/auth/login' || pathname === '/auth/signup')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
+    return redirectWith(new URL('/dashboard', request.url));
   }
 
+  // IMPORTANT: always return supabaseResponse so refreshed tokens reach the browser
   return supabaseResponse;
 }
 

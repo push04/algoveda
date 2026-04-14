@@ -1,11 +1,21 @@
+import { createClient } from '@/lib/supabase/server';
+import { redirect } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import TopNav from '@/components/layout/TopNav';
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Server-side auth guard — backup in case middleware misses edge cases
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    redirect('/auth/login');
+  }
+
   return (
     <div className="min-h-screen bg-[#F7F6F2]">
       <Sidebar />
