@@ -10,9 +10,9 @@ export default async function DashboardLayout({
 }) {
   // Server-side auth guard — backup in case middleware misses edge cases
   const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: jwtData } = await supabase.auth.getClaims();
 
-  if (!session) {
+  if (!jwtData?.claims) {
     redirect('/auth/login');
   }
 
