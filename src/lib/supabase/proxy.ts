@@ -76,9 +76,11 @@ export async function updateSession(request: NextRequest) {
       .some(({ name }) => name.startsWith('sb-'));
 
     if (hasSupabaseCookie) {
-      const url = new URL('/auth/logout', request.url);
-      url.searchParams.set('redirect', pathname);
-      return redirectWith(url);
+      // Be optimistic when Supabase cookies are present but claims/session check
+      // fails (transient auth network issues). Route handlers still perform
+      // verified auth checks.
+      applyNoCacheHeaders(supabaseResponse);
+      return supabaseResponse;
     }
 
     const url = new URL('/auth/login', request.url);

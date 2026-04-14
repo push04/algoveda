@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import TopNav from '@/components/layout/TopNav';
@@ -12,8 +13,10 @@ export default async function DashboardLayout({
   const supabase = await createClient();
   const { data: jwtData } = await supabase.auth.getClaims();
   const { data: sessionData } = await supabase.auth.getSession();
+  const cookieStore = await cookies();
+  const hasSupabaseCookie = cookieStore.getAll().some(({ name }) => name.startsWith('sb-'));
 
-  if (!jwtData?.claims && !sessionData?.session?.user) {
+  if (!jwtData?.claims && !sessionData?.session?.user && !hasSupabaseCookie) {
     redirect('/auth/login');
   }
 
