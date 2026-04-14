@@ -71,6 +71,16 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!isPublic && !isLoggedIn) {
+    const hasSupabaseCookie = request.cookies
+      .getAll()
+      .some(({ name }) => name.startsWith('sb-'));
+
+    if (hasSupabaseCookie) {
+      const url = new URL('/auth/logout', request.url);
+      url.searchParams.set('redirect', pathname);
+      return redirectWith(url);
+    }
+
     const url = new URL('/auth/login', request.url);
     url.searchParams.set('redirect', pathname);
     return redirectWith(url);
