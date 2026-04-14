@@ -1,0 +1,8 @@
+feat: Fix Groq model, remove AI branding, simplify login
+
+- Change Groq model from llama3-70b-8192 to llama-3.1-70b-versatile
+- Remove all references to Groq, AI, Model from UI - use "Research Engine" instead
+- Remove email confirmation requirement from login
+- Build successful - all 40 routes
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>

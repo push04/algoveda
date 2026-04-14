@@ -1,0 +1,1 @@
+-e "credentials.txt\n*.local.json\n.env.local"  
